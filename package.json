@@ -2,7 +2,7 @@
   "name": "coordinate-adapt",
   "version": "1.0.0",
   "description": "Assess node's coordnate according to received statsions info and each RSSI. ",
-  "main": "coordinate-adpt.js",
+  "main": "coordinate-adapt.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
