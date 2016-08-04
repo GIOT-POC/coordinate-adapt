@@ -5,15 +5,20 @@ exports.getVersion = function() {
 }
 
 //coordinate position transfer
-exports.CoorTrans = function CoorTrans(callback, ...params) {
-   for(var i in arguments){
-    console.log('i:\t', i, '\t', arguments[i]);
+exports.CoorTrans = function CoorTrans(station, callback) {
+   for(var i =0; i < station.length;  i++){
+    console.log(station[i]);
    }
 
 
 }
 
-// statsionsURL is station Info db , fingerURL is finger print db  
-exports.init_db = function init_db(statsionsURL, fingerURL) {
+//initial station Info db  
+exports.InitStation_db = function InitStation_db(dbURL) {
+    
+}
+
+//initial finger print db  
+exports.InitFinger_db = function InitFinger_db(dbURL) {
     
 }
