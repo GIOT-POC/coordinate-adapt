@@ -1,9 +1,11 @@
-var pjson = require('./package.json');
+var pjson = require('./package.json'),
+    couchbase = require('couchbase');
+
 
 //db object
 var buckets = {
-    StationInfo: function () { },
-    Finger: function () { }
+    Base: function () { },
+    LF: function () { }
 };
 
 exports.getVersion = function () {
@@ -12,6 +14,8 @@ exports.getVersion = function () {
 
 //coordinate position transfer
 exports.CoorTrans = function CoorTrans(station, callback) {
+    console.log('coordinate-adapt ver. ', pjson.version);
+
     for (var i = 0; i < station.length; i++) {
         console.log(station[i]);
     }
@@ -20,11 +24,10 @@ exports.CoorTrans = function CoorTrans(station, callback) {
 }
 
 //initial station Info db
-exports.InitStation_db = function InitStation_db(dbURL) {
-    console.log('Start initial StationInfo db');
-    var couchbase = require('couchbase')
+exports.InitBase_db = function InitBase_db(dbURL, [args]) {
+    console.log('Start initial Base db');
     var cluster = new couchbase.Cluster(dbURL);
-    buckets.StationInfo = cluster.openBucket('System_Config');
+    buckets.Base = cluster.openBucket(args.bucketname, args.pw);
     // var bucket = cluster.openBucket('System_Config');
     // bucket.get('TRACKER-gxcJqqvNOD_gwid_geoinfo_mapping', function (err, result) {
     //     if (err) throw err;
@@ -32,7 +35,19 @@ exports.InitStation_db = function InitStation_db(dbURL) {
     // });
 }
 
-//initial Location FingerPrint db
-exports.InitLF_db = function InitLF_db(dbURL) {
+//initial Location LFPrint db
+exports.InitLF_db = function InitLF_db(dbURL, [args]) {
+    console.log('Start initial FL db');
+    var cluster = new couchbase.Cluster(dbURL);
+    buckets.LF = cluster.openBucket(args.bucketname, args.pw);
+}
 
+exports.disconnectBase_db = function disconnectBase_db() {
+    console.log('Disconnect Base db');
+    buckets.Base.disconnect();
+}
+
+exports.disconnectLF_db = function disconnectLF_db() {
+    console.log('Disconnect FL db');
+    buckets.LF.disconnect();
 }

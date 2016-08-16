@@ -1,6 +1,6 @@
 {
   "name": "coordinate-adapt",
-  "version": "1.0.1",
+  "version": "1.0.3",
   "description": "Assess node's coordnate according to received statsions info and each RSSI. ",
   "main": "coordinate-adapt.js",
   "scripts": {
@@ -14,5 +14,8 @@
     "giot"
   ],
   "author": "GIOT-POC",
-  "license": "MIT"
+  "license": "MIT",
+  "dependencies": {
+    "couchbase": "^2.2.2"
+  }
 }
