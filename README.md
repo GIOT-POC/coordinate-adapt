@@ -12,11 +12,12 @@ coordinate-adapt is design for node, according to Bases info and RSSI to calcula
 ## API
   * <a href="#InitBase_db"><corde><b>InitBase_db()</b></code></a>
   * <a href="#InitLF_db"><corde><b>InitLF_db()</b></code></a>
+  * <a href="#InitLF_search"><corde><b>InitLF_search()</b></code></a>
   * <a href="#disconnectBase_db"><corde><b>disconnectBase_db()</b></code></a>
   * <a href="#disconnectLF_db"><corde><b>disconnectLF_db()</b></code></a>
   * <a href="#CoorTrans"><corde><b>CoorTrans()</b></code></a>
   * <a href="#NodeGPSInsert"><corde><b>NodeGPSInsert()</b></code></a>
-  
+
 ## Status Code
 
 -------------------------------------------------------
@@ -40,6 +41,24 @@ Initialize Location Fingerprint database
 
 			coordinate.InitLF_db('couchbase://127.0.0.1', [{bucketname: "finger", pw: ''}]);
 
+<a name="InitLF_search"></a>
+### InitLF_search(configs)
+Initial Local Fingerprint elasticsearch
+
+`configs` is an object to configure elasticsearch
+
+[Reference elasticsearch Configuration](https://www.elastic.co/guide/en/elasticsearch/client/javascript-api/current/configuration.html#config-options)
+
+	InitLF_search({
+        ... config options ...
+    });
+
+    ----------------------------------
+
+    InitLF_search({
+        host: 'localhost:9200'
+    });
+
 <a name="disconnectBase_db"></a>
 ### disconnectBase_db()
 Disconnect base datebase
@@ -49,30 +68,30 @@ Disconnect base datebase
 Disconnect Localtion Fingerprint database
 
 <a name="CoorTrans"></a>
-### CoorTrans([option], callback)
+### CoorTrans([GwList], callback(err, result))
 To make a assessment of the Node's coordinate.
 
-`options` is an object content `GWID`, `RSSI` and `SNR` with the following defaults:
- * `GWID` : the gateway ID, string
- * `RSSI` : Received Signal Strength Indicator, string
- * `SNR` : Signal-to-noise ratio, string
+`GwList` is an object content `GWID`, `RSSI` and `SNR` with the following defaults:
+ * `GWID` : the gateway ID, (string)
+ * `RSSI` : Received Signal Strength Indicator, (string)
+ * `SNR` : Signal-to-noise ratio, (string)
 
 		CoorTrans([{GWID: "111ABC12345", RSSI:"-13", SNR: ""},
                     {GWID: "222ABC12345", RSSI:"-43", SNR: ""},
                     {GWID: "333ABC12345", RSSI:"-23", SNR: ""}], callback)
- The callback is called when the coordinate has been Calculated.
 
- The callback with following format:
+ The callback is passed two arguments (err, result), where result is the coordinate.
+
+`err` :
+
+`result`: (object)
+
+ The `result` object with following content:
  * `GpsX` : East Longitude （string）
  * `GpsY` :	North Latitude （string）
  * `Type` : What kind of method to generates the coordinate (int)
     * FingerPrint type is 0
     * Triangulation typs is 1
-
-        	callback({GpsX: "",
-                        GpsY: "",
-                        Type: ,
-                      })
 
 <a name="NodeGPSInsert"></a>
 ### NodeGPSInsert(object)
@@ -80,24 +99,24 @@ To make a assessment of the Node's coordinate.
 
 	Following object data format
 
-      NodeGPSInsert({
-      "nodeGPS_N": "24.871675",
-      "nodeGPS_E": "121.009478",
-      "Gateway": [
-          {
-              "rssi": 6,
-              "snr": 15,
-              "time": "1471248279124",
-              "gatewayID": "0000000c437620b1",
-              "mac": "abcdef300012",
-          },
-          {
-              "rssi": 1,
-              "snr": 12,
-              "time": "1471248279124",
-              "gatewayID": "00001c497b30b7ee",
-              "mac": "abcdef300012",
-          }]
-	  })
+        NodeGPSInsert({
+        "nodeGPS_N": "24.871675",
+        "nodeGPS_E": "121.009478",
+        "Gateway": [
+            {
+                "rssi": 6,
+                "snr": 15,
+                "time": "1471248279124",
+                "gatewayID": "0000000c437620b1",
+                "mac": "abcdef300012",
+            },
+            {
+                "rssi": 1,
+                "snr": 12,
+                "time": "1471248279124",
+                "gatewayID": "00001c497b30b7ee",
+                "mac": "abcdef300012",
+            }]
+        })
 
 -------------------------------------------------------

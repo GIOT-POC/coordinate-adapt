@@ -3,6 +3,8 @@ var pjson = require('./package.json');
 var couchbase = require('couchbase');
 var trilateration = require('./lib/trilateration');
 var geoUtil = require('./lib/geo_utility');
+var elasticsearch = require('elasticsearch');
+var status_code = require('./lib/status_code.js')
 
 var RSSI_REF_VALUE = -73;
 var RSSI_LOSS_CONSTANT = 1.1097481333265906;
@@ -11,6 +13,11 @@ var RSSI_LOSS_CONSTANT = 1.1097481333265906;
 var buckets = {
     Base: function () { },
     LF: function () { }
+};
+
+//elasticsearch object
+var elasticObj = {
+    client: function () {}
 };
 
 exports.getVersion = function () {
@@ -24,6 +31,25 @@ exports.InitLF_db = function InitLF_db(dbURL, [args]) {
     buckets.LF = cluster.openBucket(args.bucketname, args.pw);
 }
 
+//initial station Info db
+exports.InitBase_db = function InitBase_db(dbURL, [args]) {
+    console.log('Start initial Base db');
+    var cluster = new couchbase.Cluster(dbURL);
+    buckets.Base = cluster.openBucket(args.bucketname, args.pw);
+    // var bucket = cluster.openBucket('System_Config');
+    // bucket.get('TRACKER-gxcJqqvNOD_gwid_geoinfo_mapping', function (err, result) {
+    //     if (err) throw err;
+    //     console.log(result.value);
+    // });
+}
+
+//Initial Local Fingerprint elasticsearch
+exports.InitLF_search = function InitLF_search(configs) {
+    console.log(configs);
+    console.log('Start initial LF elasticsearch ');
+    elasticObj.client = elasticsearch.Client(configs);
+}
+
 exports.disconnectBase_db = function disconnectBase_db() {
     console.log('Disconnect Base db');
     buckets.Base.disconnect();
@@ -34,7 +60,7 @@ exports.disconnectLF_db = function disconnectLF_db() {
     buckets.LF.disconnect();
 }
 
-// RSSI trans to distance
+// Saves effect GPS coordinate of NODE
 exports.NodeGPSInsert = function NodeGPSInsert(nodeGroup) {
     console.log('Gateway count', nodeGroup.Gateway.length);
 }
@@ -43,9 +69,9 @@ exports.NodeGPSInsert = function NodeGPSInsert(nodeGroup) {
 exports.CoorTrans = function CoorTrans(station, callback) {
     console.log('coordinate-adapt ver. ', pjson.version);
 
-    for (var i = 0; i < station.length; i++) {
-        console.log(station[i]);
-    }
+    // for (var i = 0; i < station.length; i++) {
+    //     console.log(station[i]);
+    // }
 
     //try to find finger print
     findFingerprint(station, function(err, result) {
@@ -92,18 +118,6 @@ exports.CoorTrans = function CoorTrans(station, callback) {
 
         //todo: return result
     });
-}
-
-//initial station Info db
-exports.InitBase_db = function InitBase_db(dbURL, [args]) {
-    console.log('Start initial Base db');
-    var cluster = new couchbase.Cluster(dbURL);
-    buckets.Base = cluster.openBucket(args.bucketname, args.pw);
-    // var bucket = cluster.openBucket('System_Config');
-    // bucket.get('TRACKER-gxcJqqvNOD_gwid_geoinfo_mapping', function (err, result) {
-    //     if (err) throw err;
-    //     console.log(result.value);
-    // });
 }
 
 //find finger print with input dataArray: [{GWID, RSSI}], output callback(err, result)
