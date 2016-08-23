@@ -1,8 +1,8 @@
 var util = require('util');
 var pjson = require('./package.json');
 var couchbase = require('couchbase');
-var trilateration = require('./trilateration');
-var geoUtil = require('./geo_utility');
+var trilateration = require('./lib/trilateration');
+var geoUtil = require('./lib/geo_utility');
 
 var RSSI_REF_VALUE = -73;
 var RSSI_LOSS_CONSTANT = 1.1097481333265906;
@@ -15,6 +15,28 @@ var buckets = {
 
 exports.getVersion = function () {
     console.log(pjson.version);
+}
+
+//initial Location LFPrint db
+exports.InitLF_db = function InitLF_db(dbURL, [args]) {
+    console.log('Start initial FL db');
+    var cluster = new couchbase.Cluster(dbURL);
+    buckets.LF = cluster.openBucket(args.bucketname, args.pw);
+}
+
+exports.disconnectBase_db = function disconnectBase_db() {
+    console.log('Disconnect Base db');
+    buckets.Base.disconnect();
+}
+
+exports.disconnectLF_db = function disconnectLF_db() {
+    console.log('Disconnect FL db');
+    buckets.LF.disconnect();
+}
+
+// RSSI trans to distance
+exports.NodeGPSInsert = function NodeGPSInsert(nodeGroup) {
+    console.log('Gateway count', nodeGroup.Gateway.length);
 }
 
 //coordinate position transfer
@@ -82,23 +104,6 @@ exports.InitBase_db = function InitBase_db(dbURL, [args]) {
     //     if (err) throw err;
     //     console.log(result.value);
     // });
-}
-
-//initial Location LFPrint db
-exports.InitLF_db = function InitLF_db(dbURL, [args]) {
-    console.log('Start initial FL db');
-    var cluster = new couchbase.Cluster(dbURL);
-    buckets.LF = cluster.openBucket(args.bucketname, args.pw);
-}
-
-exports.disconnectBase_db = function disconnectBase_db() {
-    console.log('Disconnect Base db');
-    buckets.Base.disconnect();
-}
-
-exports.disconnectLF_db = function disconnectLF_db() {
-    console.log('Disconnect FL db');
-    buckets.LF.disconnect();
 }
 
 //find finger print with input dataArray: [{GWID, RSSI}], output callback(err, result)

@@ -15,6 +15,7 @@ coordinate-adapt is design for node, according to Bases info and RSSI to calcula
   * <a href="#disconnectBase_db"><corde><b>disconnectBase_db()</b></code></a>
   * <a href="#disconnectLF_db"><corde><b>disconnectLF_db()</b></code></a>
   * <a href="#CoorTrans"><corde><b>CoorTrans()</b></code></a>
+  * <a href="#NodeGPSInsert"><corde><b>NodeGPSInsert()</b></code></a>
   
 ## Status Code
 
@@ -72,5 +73,31 @@ To make a assessment of the Node's coordinate.
                         GpsY: "",
                         Type: ,
                       })
+
+<a name="NodeGPSInsert"></a>
+### NodeGPSInsert(object)
+* object: content node GPS coordinate and Those GWs receives data of node
+
+	Following object data format
+
+      NodeGPSInsert({
+      "nodeGPS_N": "24.871675",
+      "nodeGPS_E": "121.009478",
+      "Gateway": [
+          {
+              "rssi": 6,
+              "snr": 15,
+              "time": "1471248279124",
+              "gatewayID": "0000000c437620b1",
+              "mac": "abcdef300012",
+          },
+          {
+              "rssi": 1,
+              "snr": 12,
+              "time": "1471248279124",
+              "gatewayID": "00001c497b30b7ee",
+              "mac": "abcdef300012",
+          }]
+	  })
 
 -------------------------------------------------------
