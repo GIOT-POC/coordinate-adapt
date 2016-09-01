@@ -25,43 +25,45 @@ exports.getVersion = function () {
 }
 
 //initial Location LFPrint db
-exports.InitLF_db = function InitLF_db(dbURL, [args]) {
+exports.InitLF_db = function InitLF_db(configs) {
     console.log('Start initial FL db');
-    var cluster = new couchbase.Cluster(dbURL);
-    buckets.LF = cluster.openBucket(args.bucketname, args.pw);
+    // var cluster = new couchbase.Cluster(dbURL);
+    // buckets.LF = cluster.openBucket(args.bucketname, args.pw);
+    console.log(configs);
+    elasticObj.client = elasticsearch.Client(configs);
 }
 
 //initial station Info db
-exports.InitBase_db = function InitBase_db(dbURL, [args]) {
+exports.InitBase_db = function InitBase_db(dbURL, args, callback) {
     console.log('Start initial Base db');
     var cluster = new couchbase.Cluster(dbURL);
-    buckets.Base = cluster.openBucket(args.bucketname, args.pw);
-    // var bucket = cluster.openBucket('System_Config');
-    // bucket.get('TRACKER-gxcJqqvNOD_gwid_geoinfo_mapping', function (err, result) {
-    //     if (err) throw err;
-    //     console.log(result.value);
-    // });
+    buckets.Base = cluster.openBucket(args.bucketname, args.pw, function(err){
+        if(err){
+            status_code.CODE_INVALID.message = status_code.CODE_INVALID.message + err;
+            callbackcallback(status_code.DB_INITIAL_ERROR);  
+        }
+    });
 }
 
 //Initial Local Fingerprint elasticsearch
-exports.InitLF_search = function InitLF_search(configs) {
-    console.log(configs);
-    console.log('Start initial LF elasticsearch ');
-    elasticObj.client = elasticsearch.Client(configs);
-}
+// exports.InitLF_search = function InitLF_search(configs) {
+//     console.log(configs);
+//     console.log('Start initial LF elasticsearch ');
+//     elasticObj.client = elasticsearch.Client(configs);
+// }
 
 exports.disconnectBase_db = function disconnectBase_db() {
     console.log('Disconnect Base db');
     buckets.Base.disconnect();
 }
 
-exports.disconnectLF_db = function disconnectLF_db() {
-    console.log('Disconnect FL db');
-    buckets.LF.disconnect();
-}
+// exports.disconnectLF_db = function disconnectLF_db() {
+//     console.log('Disconnect FL db');
+//     buckets.LF.disconnect();
+// }
 
 // Saves effect GPS coordinate of NODE
-exports.NodeGPSInsert = function NodeGPSInsert(nodeGroup) {
+exports.NodeGPSInsert = function NodeGPSInsert(nodeGroup, callback) {
     console.log('Gateway count', nodeGroup.Gateway.length);
 }
 
