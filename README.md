@@ -12,9 +12,7 @@ coordinate-adapt is design for node, according to Bases info and RSSI to calcula
 ## API
   * <a href="#InitBase_db"><corde><b>InitBase_db()</b></code></a>
   * <a href="#InitLF_db"><corde><b>InitLF_db()</b></code></a>
-  * <a href="#InitLF_search"><corde><b>InitLF_search()</b></code></a>
   * <a href="#disconnectBase_db"><corde><b>disconnectBase_db()</b></code></a>
-  * <a href="#disconnectLF_db"><corde><b>disconnectLF_db()</b></code></a>
   * <a href="#CoorTrans"><corde><b>CoorTrans()</b></code></a>
   * <a href="#NodeGPSInsert"><corde><b>NodeGPSInsert()</b></code></a>
 
@@ -22,7 +20,7 @@ coordinate-adapt is design for node, according to Bases info and RSSI to calcula
 
 -------------------------------------------------------
 <a name="InitBase_db"></a>
-### InitBase_db(dbUrl, [args])
+### InitBase_db(dbUrl, args, callback)
 Initialize GateWay Base List database
  * `dbUrl` is Base list db URL
  * `args` is bucket info, name and password (if needed)
@@ -31,19 +29,13 @@ Initialize GateWay Base List database
 
 			coordinate.InitBase_db('couchbase://127.0.0.1', [{bucketname: "base", pw: ''}]);
 
+ * `callback`  The callback is passed a argument (err)
+    
+    Return code 2001 if initial failed
+    
 <a name="InitLF_db"></a>
-### InitLF_db(dbUrl, [args])
-Initialize Location Fingerprint database
- * `dbUrl` is LF db URL
- * `args` is bucket info, name and password (if needed)
-    * `bucketname` : LF db's bucket name, string
-    * `pw` : access bucket password, fill if needed otherwise empty string, string
-
-			coordinate.InitLF_db('couchbase://127.0.0.1', [{bucketname: "finger", pw: ''}]);
-
-<a name="InitLF_search"></a>
-### InitLF_search(configs)
-Initial Local Fingerprint elasticsearch
+### InitLF_db(configs)
+Initialize Location Fingerprint elasticsearch database
 
 `configs` is an object to configure elasticsearch
 
@@ -62,10 +54,6 @@ Initial Local Fingerprint elasticsearch
 <a name="disconnectBase_db"></a>
 ### disconnectBase_db()
 Disconnect base datebase
-
-<a name="disconnectLF_db"></a>
-### disconnectLF_db()
-Disconnect Localtion Fingerprint database
 
 <a name="CoorTrans"></a>
 ### CoorTrans([GwList], callback(err, result))
@@ -94,7 +82,7 @@ To make a assessment of the Node's coordinate.
     * Triangulation typs is 1
 
 <a name="NodeGPSInsert"></a>
-### NodeGPSInsert(object)
+### NodeGPSInsert(object, callback)
 * object: content node GPS coordinate and Those GWs receives data of node
 
 	Following object data format
@@ -117,6 +105,8 @@ To make a assessment of the Node's coordinate.
                 "gatewayID": "00001c497b30b7ee",
                 "mac": "abcdef300012",
             }]
-        })
+        }, callback)
+
+The callback is passed two arguments (err, result)
 
 -------------------------------------------------------
