@@ -1,5 +1,5 @@
 # coordinate-adapt
-coordinate-adapt is design for node, according to Bases info and RSSI to calculation node's coordinate.
+coordinate-adapt is design for missed GPS node, according to Bases info and RSSI to calculation node's coordinate.
 
 <a name="install"></a>
 ## Installation
@@ -21,7 +21,7 @@ coordinate-adapt is design for node, according to Bases info and RSSI to calcula
 -------------------------------------------------------
 <a name="InitBase_db"></a>
 ### InitBase_db(dbUrl, args, callback)
-Initialize GateWay Base List database
+Initialize Gateway List database
  * `dbUrl` is Base list db URL
  * `args` is bucket info, name and password (if needed)
     * `bucketname` : Base db's bucket name, string
@@ -41,13 +41,13 @@ Initialize Location Fingerprint elasticsearch database
 
 [Reference elasticsearch Configuration](https://www.elastic.co/guide/en/elasticsearch/client/javascript-api/current/configuration.html#config-options)
 
-	InitLF_search({
+	InitLF_db({
         ... config options ...
     });
 
     ----------------------------------
 
-    InitLF_search({
+    InitLF_db({
         host: 'localhost:9200'
     });
 
