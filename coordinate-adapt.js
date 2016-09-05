@@ -74,14 +74,14 @@ exports.NodeGPSInsert = function NodeGPSInsert(nodeGroup, callback) {
 exports.CoorTrans = function CoorTrans(station, callback) {
     console.log('coordinate-adapt ver. ', pjson.version);
 
-     for (var i = 0; i < station.length; i++) {
-         console.log(station[i]);
-     }
+//     for (var i = 0; i < station.length; i++) {
+//         console.log(station[i]);
+//     }
 
     //try to find finger print
     findFingerprint(station, function(err, result) {
         if (err) {
-            console.log('Find fingerprint failed:\n' + err);
+            //console.log('Find fingerprint failed:\n' + err);
 
             //get station information for location estimation
             var idArray = station.map(function(item) {
@@ -115,7 +115,7 @@ exports.CoorTrans = function CoorTrans(station, callback) {
                     circles.push(circle);
                 }
 
-                var point = trilateration.intersect(...circles);
+                var point = trilateration.intersect(circles);
                 var gps = geoUtil.convertCartesianToGPS(point, base);
                 var result = {GpsX: gps.GpsX.toString(), GpsY: gps.GpsY.toString(), Type: 1};
                 callback(null, result);
@@ -142,7 +142,6 @@ function getStationInfo(dataArray, callback) {
 
     buckets.Base.get('TRACKER-gxcJqqvNOD_gwid_geoinfo_mapping', function(err, result) {
         if (err) {
-                     console.log('Check error here!!!!!!!!!!!!');
             return callback(err);
         }
 
