@@ -7,6 +7,36 @@ coordinate-adapt is design for missed GPS node, according to Bases info and RSSI
 
 <a name="example"></a>
 ## Example
+	var adapt = require('./coordinate-adapt/coordinate-adapt');
+
+	console.log('Hello SmartLocation test ...');
+	
+	adapt.InitBase_db('couchbase://127.0.0.1', {bucketname: 'System_Config'});
+	
+	adapt.InitLF_db({
+	    host: 'http://127.0.0.1:9200',
+	    index: 'fingerprint-test'
+	});
+	
+	var data = [
+	    {GWID: "000C437620B1", RSSI:"-5", SNR: "0"},
+	
+	    {GWID: "1C497B3B8027", RSSI:"-20", SNR: "0"},
+	
+	    {GWID: "1c497b3b8157", RSSI:"-112", SNR: "0"}
+	];
+	
+	adapt.CoorTrans(data, function(err, result) {
+	
+	    if (err) {
+	        console.log('Check coordinate failed:');
+	        console.log(err);
+	        return;
+	    }
+	
+	    console.log('Check coordinate result: ' + result.GpsX + ' ' + result.GpsY + ' ' + result.Type);
+	
+	});
 
 <a name="api"></a>
 ## API
