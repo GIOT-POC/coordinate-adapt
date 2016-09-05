@@ -27,7 +27,7 @@ Initialize Gateway List database
     * `bucketname` : Base db's bucket name, string
     * `pw` : access bucket password, fill if needed otherwise empty string, string
 
-			coordinate.InitBase_db('couchbase://127.0.0.1', [{bucketname: "base", pw: ''}]);
+			coordinate.InitBase_db('couchbase://127.0.0.1', {bucketname: "base", pw: ''});
 
  * `callback`  The callback is passed a argument (err)
     

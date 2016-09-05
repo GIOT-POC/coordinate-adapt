@@ -5,9 +5,11 @@ var trilateration = require('./lib/trilateration');
 var geoUtil = require('./lib/geo_utility');
 var elasticsearch = require('elasticsearch');
 var status_code = require('./lib/status_code.js')
+var fingerprint = require('./lib/fingerprint');
 
 var RSSI_REF_VALUE = -73;
 var RSSI_LOSS_CONSTANT = 1.1097481333265906;
+var RSSI_LOSS_CONSTANT = 3;
 
 //db object
 var buckets = {
@@ -31,6 +33,7 @@ exports.InitLF_db = function InitLF_db(configs) {
     // buckets.LF = cluster.openBucket(args.bucketname, args.pw);
     console.log(configs);
     elasticObj.client = elasticsearch.Client(configs);
+    fingerprint.setupDB(configs.host, configs.index);
 }
 
 //initial station Info db
@@ -40,7 +43,7 @@ exports.InitBase_db = function InitBase_db(dbURL, args, callback) {
     buckets.Base = cluster.openBucket(args.bucketname, args.pw, function(err){
         if(err){
             status_code.CODE_INVALID.message = status_code.CODE_INVALID.message + err;
-            callbackcallback(status_code.DB_INITIAL_ERROR);  
+            callback(status_code.DB_INITIAL_ERROR);  
         }
     });
 }
@@ -71,9 +74,9 @@ exports.NodeGPSInsert = function NodeGPSInsert(nodeGroup, callback) {
 exports.CoorTrans = function CoorTrans(station, callback) {
     console.log('coordinate-adapt ver. ', pjson.version);
 
-    // for (var i = 0; i < station.length; i++) {
-    //     console.log(station[i]);
-    // }
+     for (var i = 0; i < station.length; i++) {
+         console.log(station[i]);
+     }
 
     //try to find finger print
     findFingerprint(station, function(err, result) {
@@ -114,7 +117,8 @@ exports.CoorTrans = function CoorTrans(station, callback) {
 
                 var point = trilateration.intersect(...circles);
                 var gps = geoUtil.convertCartesianToGPS(point, base);
-                callback(gps.GpsX.toString(), gps.GpsY.toString(), 1);
+                var result = {GpsX: gps.GpsX.toString(), GpsY: gps.GpsY.toString(), Type: 1};
+                callback(null, result);
             });
         }
 
@@ -125,6 +129,8 @@ exports.CoorTrans = function CoorTrans(station, callback) {
 //find finger print with input dataArray: [{GWID, RSSI}], output callback(err, result)
 function findFingerprint(dataArray, callback) {
     //todo: implement find fingerprint
+//    fingerprint.find(dataArray, callback);
+
     return callback(new Error('Function unimplemented !'));
 }
 
@@ -136,6 +142,7 @@ function getStationInfo(dataArray, callback) {
 
     buckets.Base.get('TRACKER-gxcJqqvNOD_gwid_geoinfo_mapping', function(err, result) {
         if (err) {
+                     console.log('Check error here!!!!!!!!!!!!');
             return callback(err);
         }
 
