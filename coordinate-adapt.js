@@ -44,8 +44,10 @@ exports.InitBase_db = function InitBase_db(dbURL, args, callback) {
         if(err){
             status_code.DB_INITIAL_ERROR.message = status_code.DB_INITIAL_ERROR.message + err;
             return callback(status_code.DB_INITIAL_ERROR);  
+        } else {
+            err = null;
         }
-        callback(status_code.COMMAND_SUCCESS);
+        callback(err);
     });
 }
 
@@ -68,8 +70,9 @@ exports.disconnectBase_db = function disconnectBase_db() {
 
 // Saves effect GPS coordinate of NODE
 exports.NodeGPSInsert = function NodeGPSInsert(nodeGroup, callback) {
+    var err = null;
     console.log('Gateway count', nodeGroup.Gateway.length);
-    callback(status_code.COMMAND_SUCCESS);
+    callback(err);
 }
 
 //coordinate position transfer

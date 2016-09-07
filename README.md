@@ -52,16 +52,16 @@ coordinate-adapt is design for missed GPS node, according to Bases info and RSSI
 <a name="InitBase_db"></a>
 ### InitBase_db(dbUrl, args, callback)
 Initialize Gateway List database
- * `dbUrl` is Base list db URL
- * `args` is bucket info, name and password (if needed)
+ `dbUrl` is Base list db URL
+ `args` is bucket info, name and password (if needed)
     * `bucketname` : Base db's bucket name, string
     * `pw` : access bucket password, fill if needed otherwise empty string, string
 
 			coordinate.InitBase_db('couchbase://127.0.0.1', {bucketname: "base", pw: ''});
 
- * `callback`  The callback is passed a status object (code: int, message: "")
+ `callback` (err) The callback is passed a argument
     
-    Return code: 2001 if initial failed, code: 1200 initial succeed.
+    Return code: 2001 if initial failed
     
 <a name="InitLF_db"></a>
 ### InitLF_db(configs)
@@ -113,7 +113,7 @@ To make a assessment of the Node's coordinate.
 
 <a name="NodeGPSInsert"></a>
 ### NodeGPSInsert(object, callback)
-* object: content node GPS coordinate and Those GWs receives data of node
+`object`: content node GPS coordinate and Those GWs receives data of node
 
 	Following object data format
 
@@ -137,7 +137,8 @@ To make a assessment of the Node's coordinate.
             }]
         }, callback)
 
-The callback is passed a status object (code: int, message: "")
-    Retuen code: 1200 initial succeed.
+`callback`(err) The callback is passed a argument
+
+Return code: 2002 if insert failed
 
 -------------------------------------------------------
