@@ -59,7 +59,7 @@ Initialize Gateway List database
 
 			coordinate.InitBase_db('couchbase://127.0.0.1', {bucketname: "base", pw: ''});
 
- * `callback`  The callback is passed a argument (err)
+ * `callback`  The callback is passed a status object (code: int, message: "")
     
     Return code: 2001 if initial failed, code: 1200 initial succeed.
     
@@ -137,6 +137,7 @@ To make a assessment of the Node's coordinate.
             }]
         }, callback)
 
-The callback is passed two arguments (err, result)
+The callback is passed a status object (code: int, message: "")
+    Retuen code: 1200 initial succeed.
 
 -------------------------------------------------------

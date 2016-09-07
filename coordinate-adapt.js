@@ -69,6 +69,7 @@ exports.disconnectBase_db = function disconnectBase_db() {
 // Saves effect GPS coordinate of NODE
 exports.NodeGPSInsert = function NodeGPSInsert(nodeGroup, callback) {
     console.log('Gateway count', nodeGroup.Gateway.length);
+    callback(status_code.COMMAND_SUCCESS);
 }
 
 //coordinate position transfer
