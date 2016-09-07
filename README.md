@@ -61,7 +61,7 @@ Initialize Gateway List database
 
  * `callback`  The callback is passed a argument (err)
     
-    Return code 2001 if initial failed
+    Return code: 2001 if initial failed, code: 1200 initial succeed.
     
 <a name="InitLF_db"></a>
 ### InitLF_db(configs)

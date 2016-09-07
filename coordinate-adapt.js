@@ -42,9 +42,10 @@ exports.InitBase_db = function InitBase_db(dbURL, args, callback) {
     var cluster = new couchbase.Cluster(dbURL);
     buckets.Base = cluster.openBucket(args.bucketname, args.pw, function(err){
         if(err){
-            status_code.CODE_INVALID.message = status_code.CODE_INVALID.message + err;
-            callback(status_code.DB_INITIAL_ERROR);  
+            status_code.DB_INITIAL_ERROR.message = status_code.DB_INITIAL_ERROR.message + err;
+            return callback(status_code.DB_INITIAL_ERROR);  
         }
+        callback(status_code.COMMAND_SUCCESS);
     });
 }
 
