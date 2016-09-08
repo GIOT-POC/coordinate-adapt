@@ -7,10 +7,6 @@ var elasticsearch = require('elasticsearch');
 var status_code = require('./lib/status_code.js')
 var fingerprint = require('./lib/fingerprint');
 
-var RSSI_REF_VALUE = -73;
-var RSSI_LOSS_CONSTANT = 1.1097481333265906;
-var RSSI_LOSS_CONSTANT = 3;
-
 //db object
 var buckets = {
     Base: function () { },
@@ -41,13 +37,18 @@ exports.InitBase_db = function InitBase_db(dbURL, args, callback) {
     console.log('Start initial Base db');
     var cluster = new couchbase.Cluster(dbURL);
     buckets.Base = cluster.openBucket(args.bucketname, args.pw, function(err){
-        if(err){
-            status_code.DB_INITIAL_ERROR.message = status_code.DB_INITIAL_ERROR.message + err;
-            return callback(status_code.DB_INITIAL_ERROR);  
-        } else {
-            err = null;
+        if (!callback) {
+            return;
         }
-        callback(err);
+
+        if(err){
+//            status_code.DB_INITIAL_ERROR.message = status_code.DB_INITIAL_ERROR.message + err;
+//            callback(status_code.DB_INITIAL_ERROR);
+            callback(genError('DB_INITIAL_ERROR', err.message));
+            return;
+        }
+
+        callback(null);
     });
 }
 
@@ -70,9 +71,18 @@ exports.disconnectBase_db = function disconnectBase_db() {
 
 // Saves effect GPS coordinate of NODE
 exports.NodeGPSInsert = function NodeGPSInsert(nodeGroup, callback) {
-    var err = null;
     console.log('Gateway count', nodeGroup.Gateway.length);
-    callback(err);
+    recordFingerprint(nodeGroup, function(err, res) {
+        if (!callback) {
+            return;
+        }
+
+        if (err) {
+            return callback(status_code.NODE_INSERT_ERROR);
+        }
+
+        callback(null);
+    });
 }
 
 //coordinate position transfer
@@ -83,17 +93,26 @@ exports.CoorTrans = function CoorTrans(station, callback) {
 //         console.log(station[i]);
 //     }
 
+    //discard redundant data
+    var idArray = [];
+    var staData = [];
+
+    for (var idx in station) {
+        if (idArray.indexOf(station[idx].GWID) != -1) {
+            continue;
+        }
+
+        idArray.push(station[idx].GWID);
+        staData.push(station[idx]);
+    }
+
     //try to find finger print
-    findFingerprint(station, function(err, result) {
+    findFingerprint(staData, function(err, result) {
         if (err) {
             //console.log('Find fingerprint failed:\n' + err);
 
             //get station information for location estimation
-            var idArray = station.map(function(item) {
-                return item.GWID;
-            });
-
-            getStationInfo(idArray, function(err, result) {
+            getStationInfo(idArray, function(err, res) {
                 if (err) {
                     console.log('Get station information failed:');
                     console.log(err);
@@ -104,39 +123,74 @@ exports.CoorTrans = function CoorTrans(station, callback) {
                 var base;
                 var circles = [];
 
-                for (i = 0; i < station.length; i++) {
+                for (var i = 0; i < staData.length; i++) {
                     var circle = {x: 0, y: 0};
-                    var data = station[i];
-                    var info = result[data.GWID];
-                    var coordinate = {GpsX: parseFloat(info.GpsX), GpsY: parseFloat(info.GpsY)};
+                    var data = staData[i];
+                    var info = res[data.GWID];
 
-                    if (!base) {
-                        base = coordinate
-                    } else {
-                        circle = geoUtil.convertGPSToCartesian(coordinate, base);
+                    if (info) {
+                        var coordinate = {GpsX: parseFloat(info.GpsX), GpsY: parseFloat(info.GpsY)};
+
+                        if (!base) {
+                            base = coordinate
+                        } else {
+                            circle = geoUtil.convertGPSToCartesian(coordinate, base);
+                        }
+
+                        circle.r = trilateration.countDistanceBySignal(parseFloat(data.RSSI), parseFloat(data.SNR));
+                        circles.push(circle);
                     }
-
-                    circle.r = countDistanceBySignal(parseFloat(data.RSSI), parseFloat(data.SNR));
-                    circles.push(circle);
                 }
 
                 var point = trilateration.intersect(circles);
                 var gps = geoUtil.convertCartesianToGPS(point, base);
                 var result = {GpsX: gps.GpsX.toString(), GpsY: gps.GpsY.toString(), Type: 1};
-                callback(null, result);
+                return callback(null, result);
             });
         }
 
-        //todo: return result
+        return callback(null, {GpsX: result.GPS_E, GpsY: result.GPS_N, Type: 0});
     });
 }
 
-//find finger print with input dataArray: [{GWID, RSSI}], output callback(err, result)
+//find fingerprint with input dataArray: [{GWID, RSSI, SNR}], output callback(err, result)
 function findFingerprint(dataArray, callback) {
-    //todo: implement find fingerprint
-//    fingerprint.find(dataArray, callback);
+    var sigArray = dataArray.map(function(item) {
+        var signal = Math.round(parseInt(item.RSSI) + parseInt(item.SNR) / 10);
+        return {GWID: item.GWID, signal: signal};
+    });
 
-    return callback(new Error('Function unimplemented !'));
+    fingerprint.find(sigArray, function(err, res) {
+        if (err) {
+            return callback(err);
+        }
+
+        callback(null, res);
+    });
+}
+
+//record fingerprint with input fpData: {nodeGPS_N, nodeGPS_E, Gateway}, output callback(err, result)
+//Gateway: [{rssi, snr, time, gatewayID, mac}]
+function recordFingerprint(fpData, callback) {
+    if (!fpData || !fpData.nodeGPS_N || !fpData.nodeGPS_E || !fpData.Gateway || fpData.Gateway.length == 0) {
+        callback(new Error('Invalid fingerprint data !'));
+        return;
+    }
+
+    var pos = {GPS_N: fpData.nodeGPS_N, GPS_E: fpData.nodeGPS_E};
+    var sigData = fpData.Gateway.map(function(item) {
+        var signal = Math.round(item.rssi + item.snr / 10);
+        return {GWID: item.gatewayID, signal: signal, time: item.time};
+    });
+
+    fingerprint.record(pos, sigData, function(err, res) {
+        if (err) {
+            callback(err);
+            return;
+        }
+
+        callback(null, res);
+    });
 }
 
 //get station information with input dataArray: [GWID], output callback(err, result)
@@ -147,14 +201,15 @@ function getStationInfo(dataArray, callback) {
 
     buckets.Base.get('TRACKER-gxcJqqvNOD_gwid_geoinfo_mapping', function(err, result) {
         if (err) {
-            return callback(err);
+            callback(err);
+            return;
         }
 
         var infoList = result.value.mapping_list;
         var tmpResult = {};
         var failCase = '';
 
-        for (i = 0; i < dataArray.length; i++) {
+        for (var i = 0; i < dataArray.length; i++) {
             var gwid = dataArray[i];
             var info = infoList[gwid];
 
@@ -166,30 +221,23 @@ function getStationInfo(dataArray, callback) {
             tmpResult[gwid] = info;
         }
 
-        if (Object.keys(tmpResult).length < dataArray.length) {
-            return callback(new Error('Get station information for' + failCase + ' failed !'));
+        if (Object.keys(tmpResult).length < dataArray.length && failCase != '') {
+            callback(new Error('Get station information for' + failCase + ' failed !'));
+            return;
         }
 
         callback(null, tmpResult);
     });
 }
 
-//count distance by signal
-//formula: RSSI = A - 10 * n * lg d
-function countDistanceBySignal(rssi, snr, refValue, lossConst) {
-    //set variables
-    var signal = snr ? rssi + snr / 10 : rssi;
-    var ref = refValue;
-    var loss = lossConst;
+//generate error object, append extra message after original error message
+function genError(type, extraMsg) {
+    var err = status_code[type];
+    var newErr = {code: err.code, message: err.message};
 
-    if (!ref) {
-        ref = RSSI_REF_VALUE;
+    if (extraMsg) {
+        newErr.message += ' - ' + extraMsg;
     }
 
-    if (!loss) {
-        loss = RSSI_LOSS_CONSTANT;
-    }
-
-    var power = (ref - signal) / (10 * loss);
-    return Math.pow(10, power);
+    return newErr;
 }
