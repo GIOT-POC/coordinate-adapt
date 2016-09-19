@@ -137,7 +137,8 @@ exports.CoorTrans = function CoorTrans(station, callback) {
                             circle = geoUtil.convertGPSToCartesian(coordinate, base);
                         }
 
-                        circle.r = trilateration.countDistanceBySignal(parseFloat(data.RSSI), parseFloat(data.SNR));
+                        var signal = Math.round(parseFloat(data.RSSI) + parseFloat(data.SNR) / 10);
+                        circle.r = trilateration.countDistanceByRSSI(signal);
                         circles.push(circle);
                     }
                 }
@@ -153,10 +154,45 @@ exports.CoorTrans = function CoorTrans(station, callback) {
     });
 }
 
+//calculate the RSSI reference value and path loss exponent for the station
+//exports.CalculateRSSIConstants = function CalculateRSSIConstants(GWID, dataArray, callback) {
+//    getStationInfo([GWID], function(err, res) {
+//        if (err) {
+//            callback(err);
+//            return;
+//        }
+//
+//        var station = {GpsX: parseFloat(res[GWID].GpsX), GpsY: parseFloat(res[GWID].GpsY)};
+//
+//        if (dataArray == null || dataArray.length <= 1) {
+//            return;
+//        }
+//
+//        var inputArray = [];
+//
+//        for (var idx in dataArray) {
+//            var item = dataArray[idx];
+//            var dist = geoUtil.distOfCoordinates(station,
+//                {GpsX: parseFloat(item.nodeGPS_E), GpsY: parseFloat(item.nodeGPS_N)});
+//
+//            if (dist == 0) {
+//                continue;
+//            }
+//
+//            var sig = Math.round(parseInt(item.rssi) + parseFloat(item.snr) / 10);
+//
+//            inputArray.push({dist: dist, rssi: sig});
+//        }
+//
+//        var result = trilateration.calculateRSSIConstants(inputArray);
+//        callback(result);
+//    })
+//}
+
 //find fingerprint with input dataArray: [{GWID, RSSI, SNR}], output callback(err, result)
 function findFingerprint(dataArray, callback) {
     var sigArray = dataArray.map(function(item) {
-        var signal = Math.round(parseInt(item.RSSI) + parseInt(item.SNR) / 10);
+        var signal = Math.round(parseInt(item.RSSI) + parseFloat(item.SNR) / 10);
         return {GWID: item.GWID, signal: signal};
     });
 
