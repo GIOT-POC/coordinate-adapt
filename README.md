@@ -18,14 +18,26 @@ coordinate-adapt is design for missed GPS node, according to Bases info and RSSI
 	    index: 'fingerprint-test'
 	});
 	
-	var data = [
-	    {GWID: "000C437620B1", RSSI:"-5", SNR: "0"},
-	
-	    {GWID: "1C497B3B8027", RSSI:"-20", SNR: "0"},
-	
-	    {GWID: "1c497b3b8157", RSSI:"-112", SNR: "0"}
-	];
-	
+	var data = {
+        "nodeMAC": "040006e5"
+        "nodeDATA": "015cbb017161ef043ac214"
+        "Gateway": [
+            {
+                "rssi": 6,
+                "snr": 15,
+                "time": "1471248279124",
+                "gatewayID": "0000000c437620b1",
+                "mac": "abcdef300012",
+            },
+            {
+                "rssi": 1,
+                "snr": 12,
+                "time": "1471248279124",
+                "gatewayID": "00001c497b30b7ee",
+                "mac": "abcdef300012",
+            }]
+        };
+
 	adapt.CoorTrans(data, function(err, result) {
 	
 	    if (err) {
@@ -86,17 +98,30 @@ Initialize Location Fingerprint elasticsearch database
 Disconnect base datebase
 
 <a name="CoorTrans"></a>
-### CoorTrans([GwList], callback(err, result))
-To make a assessment of the Node's coordinate.
+### CoorTrans(object, callback(err, result))
+`object`: content node MAC Data and Those GWs receives data of node
 
-`GwList` is an object content `GWID`, `RSSI` and `SNR` with the following defaults:
- * `GWID` : the gateway ID, (string)
- * `RSSI` : Received Signal Strength Indicator, (string)
- * `SNR` : Signal-to-noise ratio, (string)
+	Following object data format
 
-		CoorTrans([{GWID: "111ABC12345", RSSI:"-13", SNR: ""},
-                    {GWID: "222ABC12345", RSSI:"-43", SNR: ""},
-                    {GWID: "333ABC12345", RSSI:"-23", SNR: ""}], callback)
+        CoorTrans({
+        "nodeMAC": "040006e5"
+        "nodeDATA": ""
+        "Gateway": [
+            {
+                "rssi": 6,
+                "snr": 15,
+                "time": "1471248279124",
+                "gatewayID": "0000000c437620b1",
+                "mac": "abcdef300012",
+            },
+            {
+                "rssi": 1,
+                "snr": 12,
+                "time": "1471248279124",
+                "gatewayID": "00001c497b30b7ee",
+                "mac": "abcdef300012",
+            }]
+        }, callback)
 
  The callback is passed two arguments (err, result), where result is the coordinate.
 
@@ -112,7 +137,7 @@ To make a assessment of the Node's coordinate.
     * Triangulation typs is 1
 
 <a name="NodeGPSInsert"></a>
-### NodeGPSInsert(object, callback)
+### NodeGPSInsert(object, callback callback(err))
 `object`: content node GPS coordinate and Those GWs receives data of node
 
 	Following object data format
@@ -120,6 +145,8 @@ To make a assessment of the Node's coordinate.
         NodeGPSInsert({
         "nodeGPS_N": "24.871675",
         "nodeGPS_E": "121.009478",
+        "nodeMAC": "040006e5"
+        "nodeDATA": ""
         "Gateway": [
             {
                 "rssi": 6,
