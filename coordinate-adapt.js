@@ -277,3 +277,31 @@ function genError(type, extraMsg) {
 
     return newErr;
 }
+
+//getNodeST( 'Hex String', integer)
+//raw: hex string, addr bit addr between 0 to 7, return integer 1 or 0
+function getNodeST (raw, addr) {
+
+    if((typeof(addr) != 'number') || (addr < 0 && add > 7)){
+        console.log('getNodeST: addr must a number and between 0 to 7');
+        return;
+    }
+    if (raw.length < 2) {
+        console.log('getNodeST: input hex string length must long than two words');
+        return;
+    }
+
+    var bit = Math.pow(2, addr);
+    var dataHex = new Buffer(raw, 'hex')[0]; // translate string to hex encoding
+
+    if (!dataHex) {
+        console.log('getNodeST: input string not hex');
+        return;
+    }
+
+    if(dataHex & bit){
+        return 1;
+    } else {
+        return 0;
+    }
+}
