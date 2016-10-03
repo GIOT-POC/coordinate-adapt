@@ -112,14 +112,14 @@ Disconnect base datebase
                 "snr": 15,
                 "time": "1471248279124",
                 "gatewayID": "0000000c437620b1",
-                "mac": "abcdef300012",
+                "mac": "abcdef300012", //Tracker MAC
             },
             {
                 "rssi": 1,
                 "snr": 12,
                 "time": "1471248279124",
                 "gatewayID": "00001c497b30b7ee",
-                "mac": "abcdef300012",
+                "mac": "abcdef300012", //Tracker MAC
             }]
         }, callback)
 
@@ -153,14 +153,14 @@ Disconnect base datebase
                 "snr": 15,
                 "time": "1471248279124",
                 "gatewayID": "0000000c437620b1",
-                "mac": "abcdef300012",
+                "mac": "abcdef300012", //Tracker MAC
             },
             {
                 "rssi": 1,
                 "snr": 12,
                 "time": "1471248279124",
                 "gatewayID": "00001c497b30b7ee",
-                "mac": "abcdef300012",
+                "mac": "abcdef300012", //Tracker MAC
             }]
         }, callback)
 
