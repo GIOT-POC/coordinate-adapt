@@ -428,19 +428,19 @@ function getNodeST (raw, addr) {
 
     if((typeof(addr) != 'number') || (addr < 0 && add > 7)){
         console.log('getNodeST: addr must a number and between 0 to 7');
-        return;
+        return 'undefined';
     }
     if (raw.length < 2) {
         console.log('getNodeST: input hex string length must long than two words');
-        return;
+        return 'undefined';
     }
 
     var bit = Math.pow(2, addr);
     var dataHex = new Buffer(raw, 'hex')[0]; // translate string to hex encoding
 
-    if (!dataHex) {
+    if (typeof dataHex == 'undefined' && dataHex == null) {
         console.log('getNodeST: input string not hex');
-        return;
+        return 'undefined';
     }
 
     if(dataHex & bit){
