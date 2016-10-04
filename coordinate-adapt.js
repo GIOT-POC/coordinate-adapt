@@ -100,7 +100,7 @@ exports.NodeGPSInsert = function NodeGPSInsert(object, callback) {
 //    console.log('Gateway count', nodeGroup.Gateway.length);
 
     if (!object || !object.nodeGPS_N || !object.nodeGPS_E || !object.Gateway || object.Gateway.length == 0) {
-        return callback(new Error('Invalid fingerprint data !'));
+        return callback(genError('NODE_INSERT_ERROR', 'Invalid fingerprint data !'));
     }
 
     //discard redundant data
@@ -109,7 +109,13 @@ exports.NodeGPSInsert = function NodeGPSInsert(object, callback) {
     var validDataArray = [];
 
     for (var idx in dataArray) {
-        if (idArray.indexOf(dataArray[idx].gatewayID) != -1) {
+        var extIdx = idArray.indexOf(dataArray[idx].gatewayID);
+
+        if (extIdx != -1) {
+            if (dataArray[idx].snr > dataArray[extIdx].snr) {
+                validDataArray[extIdx] = dataArray[idx];
+            }
+
             continue;
         }
 
@@ -131,7 +137,7 @@ exports.NodeGPSInsert = function NodeGPSInsert(object, callback) {
         }
 
         if (err) {
-            return callback(status_code.NODE_INSERT_ERROR);
+            return callback(genError('NODE_INSERT_ERROR', err.message));
         }
 
         callback(null);
@@ -153,7 +159,13 @@ exports.CoorTrans = function CoorTrans(object, callback) {
     var staData = [];
 
     for (var idx in dataArray) {
-        if (idArray.indexOf(dataArray[idx].gatewayID) != -1) {
+        var extIdx = idArray.indexOf(dataArray[idx].gatewayID);
+
+        if (extIdx != -1) {
+            if (dataArray[idx].snr > dataArray[extIdx].snr) {
+                staData[extIdx] = dataArray[idx];
+            }
+
             continue;
         }
 
@@ -170,52 +182,68 @@ exports.CoorTrans = function CoorTrans(object, callback) {
     }
 
     findFingerprint(tbID, staData, function(err, result) {
-
-        if (err) {
-            //console.log('Find fingerprint failed:\n' + err);
-
-            if (getNodeST(object.nodeDATA, 6) == 1) {
-                return callback(new Error('Query coordinate failed !'));
-            }
-
-            //get station information for location estimation
-            getStationInfo(idArray, function(err, res) {
-                if (err && (!res || res == {})) {
-                    return callback(err);
-                }
-
-                //convert data for trilateration calculation
-                var base;
-                var circles = [];
-
-                for (var i = 0; i < staData.length; i++) {
-                    var circle = {x: 0, y: 0};
-                    var data = staData[i];
-                    var info = res[data.gatewayID];
-
-                    if (info) {
-                        var coordinate = {GpsX: parseFloat(info.GpsX), GpsY: parseFloat(info.GpsY)};
-
-                        if (!base) {
-                            base = coordinate
-                        } else {
-                            circle = geoUtil.convertGPSToCartesian(coordinate, base);
-                        }
-
-                        var signal = Math.round(data.rssi + data.snr / 10);
-                        circle.r = trilateration.countDistanceByRSSI(signal);
-                        circles.push(circle);
-                    }
-                }
-
-                var point = trilateration.intersect(circles);
-                var gps = geoUtil.convertCartesianToGPS(point, base);
-                var result = {GpsX: gps.GpsX.toString(), GpsY: gps.GpsY.toString(), Type: 1};
-                return callback(null, result);
-            });
+        if (!err) {
+            return callback(null, {GpsX: result.GPS_E, GpsY: result.GPS_N, Type: 0});
         }
 
-        return callback(null, {GpsX: result.GPS_E, GpsY: result.GPS_N, Type: 0});
+        //console.log('Find fingerprint failed:\n' + err);
+
+        if (getNodeST(object.nodeDATA, 6) == 1) {
+            return callback(genError('COORDINATE_TRANSFER_ERROR'));
+        }
+
+        //filter invalid data by signal
+        var validDataArray = [];
+
+        for (var idx in staData) {
+            if (staData[idx].snr < 0) {
+                idArray.splice(idx, 1);
+                continue;
+            }
+
+            validDataArray.push(staData[idx]);
+        }
+
+        if (validDataArray.length == 0) {
+            return callback(genError('COORDINATE_TRANSFER_ERROR', 'Invalid signal data !'));
+        }
+
+        //get station information for location estimation
+        getStationInfo(idArray, function(err, res) {
+            if (err && !res) {
+                return callback(genError('COORDINATE_TRANSFER_ERROR', err.message));
+            }
+
+            //convert data for trilateration calculation
+            var base;
+            var circles = [];
+
+            for (var i = 0; i < staData.length; i++) {
+                var circle = {x: 0, y: 0};
+                var data = staData[i];
+                var info = res[data.gatewayID];
+
+                if (info) {
+                    var coordinate = {GpsX: parseFloat(info.GpsX), GpsY: parseFloat(info.GpsY)};
+
+                    if (!base) {
+                        base = coordinate
+                    } else {
+                        circle = geoUtil.convertGPSToCartesian(coordinate, base);
+                    }
+
+                    var signal = Math.round(data.rssi + data.snr / 10);
+                    circle.r = trilateration.countDistanceByRSSI(signal);
+                    circles.push(circle);
+                }
+            }
+
+            var point = trilateration.intersect(circles);
+            var gps = geoUtil.convertCartesianToGPS(point, base);
+            var result = {GpsX: gps.GpsX.toString(), GpsY: gps.GpsY.toString(), Type: 1};
+
+            return callback(null, result);
+        });
     });
 }
 
@@ -299,6 +327,7 @@ function findFingerprint(tbID, dataArray, callback) {
     var table = tbID? tbID: 'gps-history';
 
     getFingerprintFilter(table, function(err, res) {
+        //filter invalid data
         var validDataArray = [];
 
         if (!err) {
@@ -313,6 +342,17 @@ function findFingerprint(tbID, dataArray, callback) {
             }
         } else {
             validDataArray = dataArray;
+        }
+
+        if (validDataArray.length == 0) {
+            return callback(new Error('Invalid fingerprint data !'));
+        }
+
+        //check signal data
+        for (var idx in validDataArray) {
+            if (validDataArray[idx].snr < 0) {
+                return callback(new Error('Invalid fingerprint data !'));
+            }
         }
 
         var sigArray = validDataArray.map(function(item) {
@@ -335,6 +375,7 @@ function recordFingerprint(tbID, position, dataArray, callback) {
     var table = tbID? tbID: 'gps-history';
 
     getFingerprintFilter(table, function(err, res) {
+        //filter invalid data
         var validDataArray = [];
 
         if (!err) {
@@ -355,13 +396,25 @@ function recordFingerprint(tbID, position, dataArray, callback) {
             return callback(new Error('Invalid fingerprint data !'));
         }
 
-        var sigData = validDataArray.map(function(item) {
+        //check signal data
+        for (var idx in validDataArray) {
+            if (validDataArray[idx].snr < 0) {
+                return callback(new Error('Invalid fingerprint data !'));
+            }
+        }
+
+        //sort data by timestamp
+        validDataArray.sort(function(a, b) {
+            return a.time - b.time;
+        })
+
+        var sigDataArray = validDataArray.map(function(item) {
             var signal = Math.round(item.rssi + item.snr / 10);
             return {GWID: item.gatewayID, signal: signal, time: item.time};
         });
 
         //record fingerprint data
-        fingerprint.record(table, position, sigData, function(err, res) {
+        fingerprint.record(table, position, sigDataArray, function(err, res) {
             if (err) {
                 callback(err);
                 return;
@@ -401,9 +454,12 @@ function getStationInfo(dataArray, callback) {
             tmpResult[dataArray[i]] = info;
         }
 
+        if (Object.keys(tmpResult).length == 0) {
+            tmpResult = null;
+        }
+
         if (failCase != '') {
-            callback(new Error('Get station information for' + failCase + ' failed !'), tmpResult);
-            return;
+            return callback(new Error('Get station information for' + failCase + ' failed !'), tmpResult);
         }
 
         callback(null, tmpResult);
