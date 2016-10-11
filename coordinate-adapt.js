@@ -112,7 +112,7 @@ exports.NodeGPSInsert = function NodeGPSInsert(object, callback) {
         var extIdx = idArray.indexOf(dataArray[idx].gatewayID);
 
         if (extIdx != -1) {
-            if (dataArray[idx].snr > dataArray[extIdx].snr) {
+            if (dataArray[idx].time > dataArray[extIdx].time) {
                 validDataArray[extIdx] = dataArray[idx];
             }
 
@@ -162,7 +162,7 @@ exports.CoorTrans = function CoorTrans(object, callback) {
         var extIdx = idArray.indexOf(dataArray[idx].gatewayID);
 
         if (extIdx != -1) {
-            if (dataArray[idx].snr > dataArray[extIdx].snr) {
+            if (dataArray[idx].time > dataArray[extIdx].time) {
                 staData[extIdx] = dataArray[idx];
             }
 
@@ -355,6 +355,19 @@ function findFingerprint(tbID, dataArray, callback) {
             }
         }
 
+        //sort valid data array
+        validDataArray.sort(function(a, b) {
+            if (a.time == b.time) {
+                if (a.gatewayID > b.gatewayID) {
+                    return 1;
+                }
+
+                return -1;
+            }
+
+            return a.time - b.time;
+        })
+
         var sigArray = validDataArray.map(function(item) {
             var signal = Math.round(item.rssi + item.snr / 10);
             return {GWID: item.gatewayID, signal: signal};
@@ -403,8 +416,16 @@ function recordFingerprint(tbID, position, dataArray, callback) {
             }
         }
 
-        //sort data by timestamp
+        //sort valid data array
         validDataArray.sort(function(a, b) {
+            if (a.time == b.time) {
+                if (a.gatewayID > b.gatewayID) {
+                    return 1;
+                }
+
+                return -1;
+            }
+
             return a.time - b.time;
         })
 
