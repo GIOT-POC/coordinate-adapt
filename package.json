@@ -1,6 +1,6 @@
 {
   "name": "coordinate-adapt",
-  "version": "1.1.8",
+  "version": "1.1.9",
   "description": "Assess node's coordnate according to received statsions info and each RSSI. ",
   "main": "coordinate-adapt.js",
   "scripts": {

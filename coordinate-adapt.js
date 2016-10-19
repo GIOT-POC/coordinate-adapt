@@ -44,6 +44,8 @@ exports.InitLF_db = function InitLF_db(configs) {
         fingerprint.setupDB(elasticObj.client, configs.index);
 
         //for indoor fingerprint demo
+        var info = {tolerance: 5};
+
         var gwList = [
             '00001c497b48dcdd', '00001c497b48dce6',
             '00001c497b48dbcf', '00001c497b48dbd5',
@@ -53,7 +55,9 @@ exports.InitLF_db = function InitLF_db(configs) {
             '00001c497b48dbed', '00001c497b48dbdd'
         ];
 
-        setFingerprintFilter('gps-history_gemtek_8F', gwList, function(err, res) {
+        info.validList = gwList;
+
+        setGatewayInfo('gemtek_8F', info, function(err, res) {
         });
     });
 }
@@ -103,6 +107,10 @@ exports.NodeGPSInsert = function NodeGPSInsert(object, callback) {
         return callback(genError('NODE_INSERT_ERROR', 'Invalid fingerprint data !'));
     }
 
+    //for develop & debug
+    var time = Date.now().toString();
+    logDataToDB('log-data-gps', time, object);
+
     //discard redundant data
     var dataArray = object.Gateway;
     var idArray = [];
@@ -123,15 +131,15 @@ exports.NodeGPSInsert = function NodeGPSInsert(object, callback) {
         validDataArray.push(dataArray[idx]);
     }
 
-    var tbID = null;
+    var mapID = null;
 
     //for indoor fingerprint demo
     if (getNodeST(object.nodeDATA, 6) == 1) {
-        tbID = 'gps-history_gemtek_8F';
+        mapID = 'gemtek_8F';
     }
 
     //record fingerprint data
-    recordFingerprint(tbID, {GPS_N: object.nodeGPS_N, GPS_E: object.nodeGPS_E}, validDataArray, function(err, res) {
+    recordFingerprint(mapID, {GPS_N: object.nodeGPS_N, GPS_E: object.nodeGPS_E}, validDataArray, function(err, res) {
         if (!callback) {
             return;
         }
@@ -154,6 +162,10 @@ exports.CoorTrans = function CoorTrans(object, callback) {
 //         console.log(dataArray[i]);
 //     }
 
+    //for develop & debug
+    var time = Date.now().toString();
+    logDataToDB('log-data-query', time, object);
+
     //discard redundant data
     var idArray = [];
     var staData = [];
@@ -174,14 +186,14 @@ exports.CoorTrans = function CoorTrans(object, callback) {
     }
 
     //try to find fingerprint
-    var tbID = null;
+    var mapID = null;
 
     //for indoor fingerprint demo
     if (getNodeST(object.nodeDATA, 6) == 1) {
-        tbID = 'gps-history_gemtek_8F';
+        mapID = 'gemtek_8F';
     }
 
-    findFingerprint(tbID, staData, function(err, result) {
+    findFingerprint(mapID, staData, function(err, result) {
         if (!err) {
             return callback(null, {GpsX: result.GPS_E, GpsY: result.GPS_N, Type: 0});
         }
@@ -282,18 +294,18 @@ exports.CoorTrans = function CoorTrans(object, callback) {
 //    })
 //}
 
-//set fingerprint filter with tbID, gwidList: [GWID], output callback(err, res)
-function setFingerprintFilter(tbID, gwidList, callback) {
-    var docID = tbID? tbID: 'gps-history';
+//set fingerprint filter with mapID, gwidList: [GWID], output callback(err, res)
+function setGatewayInfo(mapID, info, callback) {
+    if (!mapID || mapID == '') {
+        return callback(new Error('Set gateway information failed: invalid map ID !'));
+    }
 
     // Index document
     elasticObj.client.index({
         index: elasticObj.index,
-        type: 'gateway-filter',
-        id: docID,
-        body: {
-            validList: gwidList
-        }
+        type: 'gateway-info',
+        id: mapID,
+        body: info
     }, function (err, res) {
         if (err) {
             return callback(err);
@@ -304,33 +316,36 @@ function setFingerprintFilter(tbID, gwidList, callback) {
     });
 }
 
-//get fingerprint filter with tbID, output callback(err, res)
-function getFingerprintFilter(tbID, callback) {
-    var docID = tbID? tbID: 'gps-history';
+//get fingerprint filter with mapID, output callback(err, res)
+function getGatewayInfo(mapID, callback) {
+    if (!mapID || mapID == '') {
+        return callback(new Error('Get gateway information failed: invalid map ID !'));
+    }
 
     elasticObj.client.get({
         index: elasticObj.index,
-        type: 'gateway-filter',
-        id: docID
+        type: 'gateway-info',
+        id: mapID
     }, function (err, res) {
         if (err) {
             return callback(err);
         }
 
-        var result = {validList: res._source.validList};
-        callback(null, result);
+        callback(null, res._source);
     });
 }
 
-//find fingerprint with input dataArray: [{gatewayID, rssi, snr, time, mac}], output callback(err, result)
-function findFingerprint(tbID, dataArray, callback) {
-    var table = tbID? tbID: 'gps-history';
+//find fingerprint with input mapID, dataArray: [{gatewayID, rssi, snr, time, mac}], output callback(err, result)
+function findFingerprint(mapID, dataArray, callback) {
+    var map = mapID? mapID: '';
 
-    getFingerprintFilter(table, function(err, res) {
+    getGatewayInfo(map, function(err, res) {
         //filter invalid data
+        var tolerance = 5;
         var validDataArray = [];
 
         if (!err) {
+            tolerance = res.tolerance;
             var validList = res.validList;
 
             for (var idx in dataArray) {
@@ -373,7 +388,13 @@ function findFingerprint(tbID, dataArray, callback) {
             return {GWID: item.gatewayID, signal: signal};
         });
 
-        fingerprint.find(table, sigArray, function(err, res) {
+        var table = 'gps-history';
+
+        if (map != '') {
+            table += '_' + map;
+        }
+
+        fingerprint.find(table, tolerance, sigArray, function(err, res) {
             if (err) {
                 return callback(err);
             }
@@ -383,11 +404,11 @@ function findFingerprint(tbID, dataArray, callback) {
     });
 }
 
-//record fingerprint with input tbID, position: {GPS_N, GPS_E}, dataArray: [{gatewayID, rssi, snr, time, mac}], output callback(err, result)
-function recordFingerprint(tbID, position, dataArray, callback) {
-    var table = tbID? tbID: 'gps-history';
+//record fingerprint with input mapID, position: {GPS_N, GPS_E}, dataArray: [{gatewayID, rssi, snr, time, mac}], output callback(err, result)
+function recordFingerprint(mapID, position, dataArray, callback) {
+    var map = mapID? mapID: '';
 
-    getFingerprintFilter(table, function(err, res) {
+    getGatewayInfo(map, function(err, res) {
         //filter invalid data
         var validDataArray = [];
 
@@ -435,6 +456,12 @@ function recordFingerprint(tbID, position, dataArray, callback) {
         });
 
         //record fingerprint data
+        var table = 'gps-history';
+
+        if (map != '') {
+            table += '_' + map;
+        }
+
         fingerprint.record(table, position, sigDataArray, function(err, res) {
             if (err) {
                 callback(err);
@@ -525,4 +552,25 @@ function getNodeST (raw, addr) {
     } else {
         return 0;
     }
+}
+
+//log data to database, for debug or develop
+function logDataToDB(type, id, data, callback) {
+    // Index document
+    elasticObj.client.index({
+        index: elasticObj.index,
+        type: type,
+        id: id,
+        body: data
+    }, function (err, res) {
+        if (!callback) {
+            return;
+        }
+
+        if (err) {
+            return callback(err);
+        }
+
+        callback(null, res);
+    });
 }
