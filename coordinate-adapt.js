@@ -44,6 +44,9 @@ exports.InitLF_db = function InitLF_db(configs) {
             return;
         }
 
+        //for develop & debug
+        loadConfig();
+
         console.log('Elasticsearch cluster is OK !');
 
         fingerprint.setupDB(elasticObj.client, configs.index);
@@ -188,6 +191,7 @@ exports.NodeGPSInsert = function NodeGPSInsert(object, callback) {
 
             getMapInfo(mapID, function(err, res) {
                 var fpDataArray = [];
+                var tolerance = 3;
 
                 if (!err) {
                     //filter by map information
@@ -200,6 +204,8 @@ exports.NodeGPSInsert = function NodeGPSInsert(object, callback) {
                             fpDataArray.push(validDataArray[idx]);
                         }
                     }
+
+                    tolerance = res.tolerance;
                 } else {
                     fpDataArray = validDataArray;
                 }
@@ -210,7 +216,7 @@ exports.NodeGPSInsert = function NodeGPSInsert(object, callback) {
 
                 //record fingerprint data
                 recordFingerprint(mapID, {GPS_N: object.nodeGPS_N, GPS_E: object.nodeGPS_E},
-                    fpDataArray, function(err, res) {
+                    fpDataArray, tolerance, function(err, res) {
                 });
             });
         }, config.dataCollectionTime);
@@ -220,7 +226,6 @@ exports.NodeGPSInsert = function NodeGPSInsert(object, callback) {
 
     return callback(null);
 }
-
 
 //coordinate position transfer
 exports.CoorTrans = function CoorTrans(object, callback) {
@@ -377,7 +382,6 @@ exports.CoorTrans = function CoorTrans(object, callback) {
     }
     else {
         Array.prototype.push.apply(queryTaskData[taskID], validDataArray);
-        return callback(genError('COORDINATE_TRANSFER_ERROR', 'Insufficient signal data !'));
     }
 }
 
@@ -462,7 +466,7 @@ function getMapInfo(mapID, callback) {
 
 //find fingerprint with input mapID, dataArray: [{gatewayID, rssi, snr, time, mac}], output callback(err, result)
 function findFingerprint(mapID, dataArray, tolerance, callback) {
-    if (!dataArray || dataArray.length == 0) {
+    if (!dataArray || dataArray.length < config.minLFSignalNum) {
         return callback(new Error('Invalid fingerprint data !'));
     }
 
@@ -478,7 +482,7 @@ function findFingerprint(mapID, dataArray, tolerance, callback) {
 
         return a.time - b.time;
     })
-    
+
     var sigArray = sortedDataArray.map(function(item) {
         var signal = Math.round(item.rssi + item.snr / 10);
         return {GWID: item.gatewayID, signal: signal};
@@ -491,6 +495,12 @@ function findFingerprint(mapID, dataArray, tolerance, callback) {
         table += '_' + mapID;
     }
 
+    //log find data
+    if (config.logLevel < 1) {
+        var logObj = { table: table, signal: sigArray};
+        logDataToDB('log-data-find', logObj);
+    }
+
     fingerprint.find(table, tolerance, sigArray, function(err, res) {
         if (err) {
             return callback(err);
@@ -501,8 +511,8 @@ function findFingerprint(mapID, dataArray, tolerance, callback) {
 }
 
 //record fingerprint with input mapID, position: {GPS_N, GPS_E}, dataArray: [{gatewayID, rssi, snr, time, mac}], output callback(err, result)
-function recordFingerprint(mapID, position, dataArray, callback) {
-    if (!position || !dataArray || dataArray.length == 0) {
+function recordFingerprint(mapID, position, dataArray, tolerance, callback) {
+    if (!position || !dataArray || dataArray.length < config.minLFSignalNum) {
         return callback(new Error('Invalid fingerprint data !'));
     }
 
@@ -531,7 +541,13 @@ function recordFingerprint(mapID, position, dataArray, callback) {
         table += '_' + mapID;
     }
 
-    fingerprint.record(table, position, sigDataArray, function(err, res) {
+    //log record data
+    if (config.logLevel < 1) {
+        var logObj = { table: table, position: position, signal: sigDataArray};
+        logDataToDB('log-data-record', logObj);
+    }
+
+    fingerprint.record(table, position, tolerance, sigDataArray, function(err, res) {
         if (err) {
             callback(err);
             return;
@@ -600,8 +616,15 @@ function getNodeST (raw, addr) {
         return 'undefined';
     }
 
+    // avoid crash for raw of odd length
+    var rawStr = raw;
+
+    if (raw.length % 2 == 1) {
+        rawStr = raw + '0';
+    }
+
     var bit = Math.pow(2, addr);
-    var dataHex = new Buffer(raw, 'hex')[0]; // translate string to hex encoding
+    var dataHex = new Buffer(rawStr, 'hex')[0]; // translate string to hex encoding
 
     if (typeof dataHex == 'undefined' && dataHex == null) {
         console.log('getNodeST: input string not hex');
@@ -667,4 +690,71 @@ function setConfig(cfg) {
     if (cfg.dataCollectionTime != undefined) {
         config.dataCollectionTime = cfg.dataCollectionTime;
     }
+
+    if (cfg.minLFSignalNum != undefined) {
+        config.minLFSignalNum = cfg.minLFSignalNum;
+    }
+}
+
+
+//cean all logs with type
+exports.cleanLog = function cleanLog(type, callback) {
+    var filters = [];
+//    var filters = [ { prefix: { _type: 'gps-history_' }}];
+
+    // Search documents
+    elasticObj.client.search({
+        index: elasticObj.index,
+        type: type,
+        _source: false,
+        size: 100,
+        timeout: '180s',
+        body: {
+            query: {
+                filtered: {
+                    query: {
+                        match_all: {}
+                    },
+                    filter: {
+                        bool: {
+                            must: filters
+                        }
+                    }
+                }
+            }
+        }
+    }, function (err, res) {
+        if (err) {
+            if (callback) {
+                callback(err);
+            }
+
+            return;
+        }
+
+        var hits = res.hits.hits;
+
+        if (hits.length == 0) {
+            return callback(null);
+        }
+
+        var body = [];
+
+        for (var idx in hits) {
+            body.push({ delete: { _id: hits[idx]._id }});
+        }
+
+        elasticObj.client.bulk({
+            index: elasticObj.index,
+            type: type,
+            body : body
+        }, function (err, res) {
+            if (!callback) {
+                return;
+            }
+
+            callback(err, res);
+        });
+
+    });
 }
