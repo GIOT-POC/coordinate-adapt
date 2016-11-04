@@ -50,34 +50,6 @@ exports.InitLF_db = function InitLF_db(configs) {
         console.log('Elasticsearch cluster is OK !');
 
         fingerprint.setupDB(elasticObj.client, configs.index);
-
-        //for indoor fingerprint demo
-        var info = {tolerance: 5, GPS_N: '2487.192008', GPS_E: '1210.067'};
-
-        var gwInfo = {
-            '00001c497b48dcdd': {
-                position: '050'
-            },
-            '00001c497b48dbcf': {
-                position: '015'
-            },
-            '00001c497b48dbc0': {
-                position: '000'
-            },
-            '00001c497b48dbf7': {
-                position: '099'
-            },
-           '00001c497b48dc3e': {
-                position: '019'
-            },
-           '00001c497b48dbed': {
-                position: '004'
-            }
-        };
-
-        info.gateway = gwInfo;
-
-        setMapInfo('2487192-1210067-008', info);
     });
 }
 
@@ -287,7 +259,7 @@ exports.CoorTrans = function CoorTrans(object, callback) {
 
             //for indoor fingerprint demo
             if (getNodeST(object.nodeDATA, 6) == 1) {
-                mapID = '2487192-1210067-008';
+                mapID = '2499684-1214881-008';
             }
 
             getMapInfo(mapID, function(err, res) {
@@ -421,7 +393,7 @@ exports.CoorTrans = function CoorTrans(object, callback) {
 //}
 
 //set map information with mapID, info, output callback(err, res)
-function setMapInfo(mapID, info, callback) {
+exports.setMapInfo = function setMapInfo(mapID, info, callback) {
     if (!mapID || mapID == '') {
         return callback(new Error('Set map information failed: empty map ID !'));
     }
@@ -443,6 +415,39 @@ function setMapInfo(mapID, info, callback) {
 
         callback(null, res);
     });
+}
+
+//cean all logs with type
+exports.cleanLog = function cleanLog(type, callback) {
+    cleanESData(type, null, function(err, res) {
+        if (callback) {
+            return callback(err, res);
+        }
+    });
+}
+
+//clean map data (fingerprint data) for specific mapID with condition
+exports.cleanMapData = function cleanMapData(mapID, condition, callback) {
+    var table = 'gps-history';
+
+    if (mapID != null) {
+        table += '_' + mapID;
+    }
+
+    if (!condition) {
+        console.log('Clean ES data: ' + table);
+        cleanESData(table, null, function(err, res) {
+            if (callback) {
+                return callback(err, res);
+            }
+        });
+    } else {
+        if (condition.position) {
+            fingerprint.remove(table, condition.position, function(err, res) {
+                return callback(err, res);
+            });
+        }
+    }
 }
 
 //get map information with mapID, output callback(err, res)
@@ -495,13 +500,21 @@ function findFingerprint(mapID, dataArray, tolerance, callback) {
         table += '_' + mapID;
     }
 
-    //log find data
-    if (config.logLevel < 1) {
-        var logObj = { table: table, signal: sigArray};
-        logDataToDB('log-data-find', logObj);
-    }
-
     fingerprint.find(table, tolerance, sigArray, function(err, res) {
+        //log find data
+        if (config.logLevel < 1) {
+            var logObj = { table: table, signal: sigArray};
+
+            if (err) {
+                logObj.result = err.message;
+            }
+            else {
+                logObj.result = res;
+            }
+
+            logDataToDB('log-data-find', logObj);
+        }
+
         if (err) {
             return callback(err);
         }
@@ -696,19 +709,21 @@ function setConfig(cfg) {
     }
 }
 
+//cean elasticsearch data for specific type with filters
+function cleanESData(type, filters, callback) {
+    if (!elasticObj.client) {
+        return;
+    }
 
-//cean all logs with type
-exports.cleanLog = function cleanLog(type, callback) {
-    var filters = [];
-//    var filters = [ { prefix: { _type: 'gps-history_' }}];
+    var clnSize = 1000;
 
-    // Search documents
+    //search documents
     elasticObj.client.search({
         index: elasticObj.index,
         type: type,
         _source: false,
-        size: 100,
-        timeout: '180s',
+        size: clnSize,
+        timeout: '120s',
         body: {
             query: {
                 filtered: {
@@ -717,7 +732,7 @@ exports.cleanLog = function cleanLog(type, callback) {
                     },
                     filter: {
                         bool: {
-                            must: filters
+                         must: filters
                         }
                     }
                 }
@@ -735,9 +750,14 @@ exports.cleanLog = function cleanLog(type, callback) {
         var hits = res.hits.hits;
 
         if (hits.length == 0) {
-            return callback(null);
-        }
+            if (callback) {
+                callback(null, {delete: 0});
+            }
 
+            return;
+        }
+                             
+        //delete documents
         var body = [];
 
         for (var idx in hits) {
@@ -749,12 +769,43 @@ exports.cleanLog = function cleanLog(type, callback) {
             type: type,
             body : body
         }, function (err, res) {
-            if (!callback) {
+            //handle error case
+            if (err) {
+                if (callback) {
+                    callback(err);
+                }
+
                 return;
             }
 
-            callback(err, res);
-        });
+            //update deleted count
+            var clnCount = 0;
 
+            for (var cIdx in res.items) {
+                if (res.items[cIdx].delete.found) {
+                    clnCount++;
+                }
+            }
+
+            if (hits.length < clnSize) {
+                if (callback) {
+                    callback(null, {delete: clnCount})
+                }
+
+                return;
+            }
+
+            setTimeout(function() {
+                cleanESData(type, filters, function(err, res) {
+                    if (!err) {
+                        clnCount += res.delete;
+                    }
+
+                    if (callback) {
+                        callback(null, {delete: clnCount});
+                    }
+                });
+            }, 1000);
+        });
     });
 }
