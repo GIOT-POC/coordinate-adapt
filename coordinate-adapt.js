@@ -8,13 +8,13 @@ var status_code = require('./lib/status_code.js')
 var fingerprint = require('./lib/fingerprint');
 var config = require('./config');
 
-var queryTaskData = {};
-var recordTaskData = {};
+var queryTaskInfo = {};
+var recordTaskInfo = {};
 
 //db object
 var buckets = {
-    Base: function () { },
-    LF: function () { }
+//    Base: function () { },
+//    LF: function () { }
 };
 
 //elasticsearch object
@@ -121,15 +121,18 @@ exports.NodeGPSInsert = function NodeGPSInsert(object, callback) {
     var taskID = object.nodeMAC + '-' + Date.parse(object.Gateway[0].time);
 
     //add data to task data array
-    if (!recordTaskData[taskID]) {
-        recordTaskData[taskID] = validDataArray;
+    if (!recordTaskInfo[taskID]) {
+        recordTaskInfo[taskID] = {};
+        recordTaskInfo[taskID].data = validDataArray;
+        recordTaskInfo[taskID].callbacks = [callback];
 
         setTimeout(function() {
-            var dataArray = recordTaskData[taskID];
+            var dataArray = recordTaskInfo[taskID].data;
+            var cbArray = recordTaskInfo[taskID].callbacks;
             var gwidArray = [];
             var validDataArray = [];
 
-            delete recordTaskData[taskID];
+            delete recordTaskInfo[taskID];
 
             //discard redundant data
             for (var idx in dataArray) {
@@ -182,21 +185,19 @@ exports.NodeGPSInsert = function NodeGPSInsert(object, callback) {
                     fpDataArray = validDataArray;
                 }
 
-                if (fpDataArray.length == 0) {
-                    return;
-                }
-
                 //record fingerprint data
                 recordFingerprint(mapID, {GPS_N: object.nodeGPS_N, GPS_E: object.nodeGPS_E},
                     fpDataArray, tolerance, function(err, res) {
+                    for (var cIdx in cbArray) {
+                        cbArray[cIdx](err);
+                    }
                 });
             });
         }, config.dataCollectionTime);
     } else {
-        Array.prototype.push.apply(recordTaskData[taskID], validDataArray);
+        recordTaskInfo[taskID].data = recordTaskInfo[taskID].data.concat(validDataArray);
+        recordTaskInfo[taskID].callbacks.push(callback);
     }
-
-    return callback(null);
 }
 
 //coordinate position transfer
@@ -227,15 +228,18 @@ exports.CoorTrans = function CoorTrans(object, callback) {
     var taskID = object.nodeMAC + '-' + Date.parse(object.Gateway[0].time);
 
     //add data to task data array
-    if (!queryTaskData[taskID]) {
-        queryTaskData[taskID] = validDataArray;
+    if (!queryTaskInfo[taskID]) {
+        queryTaskInfo[taskID] = {};
+        queryTaskInfo[taskID].data = validDataArray;
+        queryTaskInfo[taskID].callbacks = [callback];
 
         setTimeout(function() {
-            var dataArray = queryTaskData[taskID];
+            var dataArray = queryTaskInfo[taskID].data;
+            var cbArray = queryTaskInfo[taskID].callbacks;
             var gwidArray = [];
             var validDataArray = [];
 
-            delete queryTaskData[taskID];
+            delete queryTaskInfo[taskID];
 
             //discard redundant data
             for (var idx in dataArray) {
@@ -255,20 +259,16 @@ exports.CoorTrans = function CoorTrans(object, callback) {
             }
 
             //get map information
-            var mapID = null;
-
-            //for indoor fingerprint demo
-            if (getNodeST(object.nodeDATA, 6) == 1) {
-                mapID = '2499684-1214881-008';
-            }
-
-            getMapInfo(mapID, function(err, res) {
+            findMapInfo(validDataArray, function(err, res) {
+                var mapID = null;
                 var gwDataArray = [];
                 var tolerance = 3;
 
                 if (!err) {
+                    var mapInfo = res.info;
+
                     //filter by map information
-                    var gwList = Object.keys(res.gateway);
+                    var gwList = Object.keys(mapInfo.gateway);
 
                     for (var idx in validDataArray) {
                         var gwid = validDataArray[idx].gatewayID;
@@ -278,36 +278,48 @@ exports.CoorTrans = function CoorTrans(object, callback) {
 
                             //check very strong signal
                             if (validDataArray[idx].rssi > 0) {
-                                return callback(null, {GpsX: res.GPS_E + res.gateway[gwid].position, GpsY: res.GPS_N, Type: 0});
+                                for (var cIdx in queryTaskInfo[taskID].callbacks) {
+                                    cbArray[cIdx](null, {GpsX: res.GPS_E + mapInfo.gateway[gwid].position, GpsY: mapInfo.GPS_N, Type: 0});
+                                }
+
+                                return;
                             }
                         }
                     }
 
-                    tolerance = res.tolerance;
+                    mapID = res.id.substring(4);
+                    tolerance = mapInfo.tolerance;
                 } else {
                     gwDataArray = validDataArray;
-                }
-
-                if (gwDataArray.length == 0) {
-                    return callback(genError('COORDINATE_TRANSFER_ERROR', 'Invalid signal data !'));
                 }
 
                 //find fingerprint data
                 findFingerprint(mapID, gwDataArray, tolerance, function(err, res) {
                     if (!err) {
-                        return callback(null, {GpsX: res.GPS_E, GpsY: res.GPS_N, Type: 0});
+                        for (var cIdx in cbArray) {
+                            cbArray[cIdx](null, {GpsX: res.GPS_E, GpsY: res.GPS_N, Type: 0});
+                        }
+
+                        return;
                     }
 
-                    //for indoor fingerprint demo
-                    if (getNodeST(object.nodeDATA, 6) == 1) {
-                        return callback(genError('COORDINATE_TRANSFER_ERROR', 'Cannot find location fingerprint !'));
+                    //only support fingerprint query for indoor positioning
+                    if (mapID) {
+                        for (var cIdx in cbArray) {
+                            cbArray[cIdx](genError('COORDINATE_TRANSFER_ERROR', 'Cannot find location fingerprint !'));
+                        }
+
+                        return;
                     }
 
                     //get station information for location estimation
                     getStationInfo(gwidArray, function(err, res) {
                         if (err) {
-                            console.log(err);
-                            return callback(genError('COORDINATE_TRANSFER_ERROR', err.message));
+                            for (var cIdx in cbArray) {
+                                cbArray[cIdx](genError('COORDINATE_TRANSFER_ERROR', err.message));
+                            }
+
+                            return;
                         }
 
                         //convert data for trilateration calculation
@@ -346,14 +358,17 @@ exports.CoorTrans = function CoorTrans(object, callback) {
                         var gps = geoUtil.convertCartesianToGPS(point, base);
                         var result = {GpsX: gps.GpsX.toString(), GpsY: gps.GpsY.toString(), Type: 1};
 
-                        return callback(null, result);
+                        for (var cIdx in cbArray) {
+                            cbArray[cIdx](null, result);
+                        }
                     });
                 });
             });
         }, config.dataCollectionTime);
     }
     else {
-        Array.prototype.push.apply(queryTaskData[taskID], validDataArray);
+        queryTaskInfo[taskID].data = queryTaskInfo[taskID].data.concat(validDataArray);
+        queryTaskInfo[taskID].callbacks.push(callback);
     }
 }
 
@@ -435,7 +450,6 @@ exports.cleanMapData = function cleanMapData(mapID, condition, callback) {
     }
 
     if (!condition) {
-        console.log('Clean ES data: ' + table);
         cleanESData(table, null, function(err, res) {
             if (callback) {
                 return callback(err, res);
@@ -448,6 +462,63 @@ exports.cleanMapData = function cleanMapData(mapID, condition, callback) {
             });
         }
     }
+}
+
+//find map by signal data array
+function findMapInfo(dataArray, callback) {
+    var body = [];
+
+    for (var idx in dataArray) {
+        body.push({});
+        body.push({
+            query: {
+                filtered: {
+                    filter: {
+                        exists: {
+                            field: 'gateway.' + dataArray[idx].gatewayID
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    elasticObj.client.msearch({
+        index: elasticObj.index,
+        type: 'map-info',
+        body: body
+    }, function(err, res) {
+        if (err) {
+            return callback(err);
+        }
+
+        var tmpResult = {};
+        var result = null;
+
+        for (var rIdx in res.responses) {
+            var hits = res.responses[rIdx].hits.hits;
+
+            for (var hIdx in hits) {
+                var mapID = hits[hIdx]._id;
+
+                if (!tmpResult[mapID]) {
+                    tmpResult[mapID] = 1;
+                } else {
+                    tmpResult[mapID] += 1;
+                }
+
+                if (!result || tmpResult[mapID] > result.count) {
+                    result = { id: mapID, count: tmpResult[mapID], source: hits[hIdx]._source };
+                }
+            }
+        }
+
+        if (!result || result.count < config.minLFSignalNum) {
+            return callback(new Error('Can\'t find map !'));
+        }
+
+        callback(null, { id: result.id, info: result.source });
+    });
 }
 
 //get map information with mapID, output callback(err, res)
@@ -477,15 +548,20 @@ function findFingerprint(mapID, dataArray, tolerance, callback) {
 
     //sort data array
     var sortedDataArray = dataArray.slice().sort(function(a, b) {
-        if (a.time == b.time) {
-            if (a.gatewayID > b.gatewayID) {
-                return 1;
-            }
-
-            return -1;
+//        if (a.time == b.time) {
+//            if (a.gatewayID > b.gatewayID) {
+//                return 1;
+//            }
+//
+//            return -1;
+//        }
+//
+//        return a.time - b.time;
+        if (a.gatewayID > b.gatewayID) {
+            return 1;
         }
 
-        return a.time - b.time;
+        return -1;
     })
 
     var sigArray = sortedDataArray.map(function(item) {
@@ -506,9 +582,8 @@ function findFingerprint(mapID, dataArray, tolerance, callback) {
             var logObj = { table: table, signal: sigArray};
 
             if (err) {
-                logObj.result = err.message;
-            }
-            else {
+                logObj.result = { error: err.message };
+            } else {
                 logObj.result = res;
             }
 
@@ -531,15 +606,20 @@ function recordFingerprint(mapID, position, dataArray, tolerance, callback) {
 
     //sort data array
     var sortedDataArray = dataArray.slice().sort(function(a, b) {
-        if (a.time == b.time) {
-            if (a.gatewayID > b.gatewayID) {
-                return 1;
-            }
-
-            return -1;
+//        if (a.time == b.time) {
+//            if (a.gatewayID > b.gatewayID) {
+//                return 1;
+//            }
+//
+//            return -1;
+//        }
+//
+//        return a.time - b.time;
+        if (a.gatewayID > b.gatewayID) {
+            return 1;
         }
 
-        return a.time - b.time;
+        return -1;
     })
 
     var sigDataArray = sortedDataArray.map(function(item) {
@@ -654,7 +734,7 @@ function getNodeST (raw, addr) {
 //log data to database, for debug or develop
 function logDataToDB(type, data, callback) {
     var time = new Date();
-    var log = {timestamp: time.toString(), data: data};
+    var log = {timestamp: Date.parse(time), date: time.toString(), data: data};
 
     // Index document
     elasticObj.client.index({

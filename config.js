@@ -2,10 +2,10 @@
 var logLevel = 3;
 
 //Time duration for data collecting
-var dataCollectionTime = 90000;
+var dataCollectionTime = 1000;
 
 //Minumum number of signal data for location fingerprint
-var minLFSignalNum = 2;
+var minLFSignalNum = 3;
 
 exports.logLevel = logLevel;
 exports.dataCollectionTime = dataCollectionTime;
