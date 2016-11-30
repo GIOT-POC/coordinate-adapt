@@ -8,8 +8,12 @@ var status_code = require('./lib/status_code.js')
 var fingerprint = require('./lib/fingerprint');
 var config = require('./config');
 
-var queryTaskInfo = {};
-var recordTaskInfo = {};
+var queryDataInfo = {};
+var recordDataInfo = {};
+var queryDataQueueInfo = {};
+var recordDataQueueInfo = {};
+var cleanQueryDataQueueTaskInfo = {};
+var cleanRecordDataQueueTaskInfo = {};
 
 //db object
 var buckets = {
@@ -118,21 +122,21 @@ exports.NodeGPSInsert = function NodeGPSInsert(object, callback) {
         return callback(genError('NODE_INSERT_ERROR', 'Invalid fingerprint data !'));
     }
 
-    var taskID = object.nodeMAC + '-' + Date.parse(object.Gateway[0].time);
+    var dataID = object.nodeMAC + '-' + Date.parse(object.Gateway[0].time);
 
-    //add data to task data array
-    if (!recordTaskInfo[taskID]) {
-        recordTaskInfo[taskID] = {};
-        recordTaskInfo[taskID].data = validDataArray;
-        recordTaskInfo[taskID].callbacks = [callback];
+    //add data to data information
+    if (!recordDataInfo[dataID]) {
+        recordDataInfo[dataID] = {};
+        recordDataInfo[dataID].time = validDataArray[0].time;
+        recordDataInfo[dataID].data = validDataArray;
 
         setTimeout(function() {
-            var dataArray = recordTaskInfo[taskID].data;
-            var cbArray = recordTaskInfo[taskID].callbacks;
+            var dataInfo = recordDataInfo[dataID];
+            var dataArray = dataInfo.data;
             var gwidArray = [];
             var validDataArray = [];
 
-            delete recordTaskInfo[taskID];
+            delete recordDataInfo[dataID];
 
             //discard redundant data
             for (var idx in dataArray) {
@@ -175,8 +179,14 @@ exports.NodeGPSInsert = function NodeGPSInsert(object, callback) {
                     for (var idx in validDataArray) {
                         var gwid = validDataArray[idx].gatewayID;
 
-                        if (gwList.indexOf(gwid) != -1) {
-                            fpDataArray.push(validDataArray[idx]);
+                        for (var gIdx in gwList) {
+                            var idList = res.gateway[gwList[gIdx]].id;
+
+                            if (idList.indexOf(gwid) != -1) {
+                                validDataArray[idx].gatewayID = gwList[gIdx];
+                                fpDataArray.push(validDataArray[idx]);
+                                break;
+                            }
                         }
                     }
 
@@ -185,19 +195,94 @@ exports.NodeGPSInsert = function NodeGPSInsert(object, callback) {
                     fpDataArray = validDataArray;
                 }
 
+                dataInfo.data = fpDataArray;
+
+                //add data to data queue
+                var queueID = object.nodeMAC + '_' + object.nodeGPS_N + '-' + object.nodeGPS_E;
+
+                if (recordDataQueueInfo[queueID]) {
+                    recordDataQueueInfo[queueID].push(dataInfo);
+                    recordDataQueueInfo[queueID].sort(function(a, b) {
+                        return Date.parse(a.time) - Date.parse(b.time);
+                    });
+                } else {
+                    recordDataQueueInfo[queueID] = [dataInfo];
+                }
+
+                //set task to clean old data
+                if (cleanRecordDataQueueTaskInfo[queueID]) {
+                    clearTimeout(cleanRecordDataQueueTaskInfo[queueID]);
+                }
+
+                cleanRecordDataQueueTaskInfo[queueID] = setTimeout(function() {
+                    delete recordDataQueueInfo[queueID];
+                }, 10000);
+
+                if (recordDataQueueInfo[queueID].length < 3) {
+                    return;
+                }
+
+                //check signal jitter
+                var dataQueue = recordDataQueueInfo[queueID];
+                var dataIdx = dataQueue.length - 1;
+                var sigInfo = {};
+                var sigInfoArray = [];
+                var sigArray = dataInfo.data;
+
+                for (var sIdx in sigArray) {
+                    sigInfo[sigArray[sIdx].gatewayID] = sigArray[sIdx].rssi;
+                }
+
+                sigInfoArray.push(sigInfo);
+
+                for (var preIdx = 0; preIdx < dataIdx; preIdx++) {
+                    var preSigInfo = {};
+                    var preSigArray = dataQueue[preIdx].data;
+
+                    if (sigArray.length != preSigArray.length) {
+                        return;
+                    }
+
+                    for (var sIdx in preSigArray) {
+                        var gwid = preSigArray[sIdx].gatewayID;
+                        var sigVal = sigInfo[gwid];
+                        var preSigVal = preSigArray[sIdx].rssi;
+
+                        if (!sigVal || Math.abs(sigVal - preSigVal) > tolerance) {
+                            return;
+                        }
+
+                        preSigInfo[gwid] = preSigVal;
+                    }
+
+                    sigInfoArray.push(preSigInfo);
+                }
+
+                //update fingerprint data
+                if (sigInfoArray.length > 1) {
+                    for (var dIdx in fpDataArray) {
+                        var gwid = fpDataArray[dIdx].gatewayID;
+                        var val = 0;
+
+                        for (var sIdx in sigInfoArray) {
+                            val += sigInfoArray[sIdx][gwid];
+                        }
+
+                        fpDataArray[dIdx].rssi = Math.round(parseFloat(val) / sigInfoArray.length);
+                    }
+                }
+
                 //record fingerprint data
                 recordFingerprint(mapID, {GPS_N: object.nodeGPS_N, GPS_E: object.nodeGPS_E},
                     fpDataArray, tolerance, function(err, res) {
-                    for (var cIdx in cbArray) {
-                        cbArray[cIdx](err);
-                    }
                 });
             });
         }, config.dataCollectionTime);
     } else {
-        recordTaskInfo[taskID].data = recordTaskInfo[taskID].data.concat(validDataArray);
-        recordTaskInfo[taskID].callbacks.push(callback);
+        recordDataInfo[dataID].data = recordDataInfo[dataID].data.concat(validDataArray);
     }
+
+    callback(null);
 }
 
 //coordinate position transfer
@@ -225,21 +310,23 @@ exports.CoorTrans = function CoorTrans(object, callback) {
         return callback(genError('COORDINATE_TRANSFER_ERROR', 'Invalid signal data !'));
     }
 
-    var taskID = object.nodeMAC + '-' + Date.parse(object.Gateway[0].time);
+    var dataID = object.nodeMAC + '-' + Date.parse(object.Gateway[0].time);
 
-    //add data to task data array
-    if (!queryTaskInfo[taskID]) {
-        queryTaskInfo[taskID] = {};
-        queryTaskInfo[taskID].data = validDataArray;
-        queryTaskInfo[taskID].callbacks = [callback];
+    //add data to data information
+    if (!queryDataInfo[dataID]) {
+        queryDataInfo[dataID] = {};
+        queryDataInfo[dataID].time = validDataArray[0].time;
+        queryDataInfo[dataID].data = validDataArray;
+        queryDataInfo[dataID].callbacks = [callback];
 
         setTimeout(function() {
-            var dataArray = queryTaskInfo[taskID].data;
-            var cbArray = queryTaskInfo[taskID].callbacks;
+            var dataInfo = queryDataInfo[dataID];
+            var dataArray = dataInfo.data;
+            var cbArray = dataInfo.callbacks;
             var gwidArray = [];
             var validDataArray = [];
 
-            delete queryTaskInfo[taskID];
+            delete queryDataInfo[dataID];
 
             //discard redundant data
             for (var idx in dataArray) {
@@ -273,16 +360,22 @@ exports.CoorTrans = function CoorTrans(object, callback) {
                     for (var idx in validDataArray) {
                         var gwid = validDataArray[idx].gatewayID;
 
-                        if (gwList.indexOf(gwid) != -1) {
-                            gwDataArray.push(validDataArray[idx]);
+                        for (var gIdx in gwList) {
+                            var idList = mapInfo.gateway[gwList[gIdx]].id;
 
-                            //check very strong signal
-                            if (validDataArray[idx].rssi > 0) {
-                                for (var cIdx in queryTaskInfo[taskID].callbacks) {
-                                    cbArray[cIdx](null, {GpsX: res.GPS_E + mapInfo.gateway[gwid].position, GpsY: mapInfo.GPS_N, Type: 0});
+                            if (idList.indexOf(gwid) != -1) {
+                                //check very strong signal
+                                if (validDataArray[idx].rssi > 0) {
+                                    for (var cIdx in queryDataInfo[dataID].callbacks) {
+                                        cbArray[cIdx](null, {GpsX: res.GPS_E + mapInfo.gateway[gwid].position, GpsY: mapInfo.GPS_N, Type: 0});
+                                    }
+
+                                    return;
                                 }
 
-                                return;
+                                validDataArray[idx].gatewayID = gwList[gIdx];
+                                gwDataArray.push(validDataArray[idx]);
+                                break;
                             }
                         }
                     }
@@ -291,6 +384,88 @@ exports.CoorTrans = function CoorTrans(object, callback) {
                     tolerance = mapInfo.tolerance;
                 } else {
                     gwDataArray = validDataArray;
+                }
+
+                dataInfo.data = gwDataArray;
+
+                //add data to data queue
+                var queueID = object.nodeMAC;
+
+                if (queryDataQueueInfo[queueID]) {
+                    queryDataQueueInfo[queueID].push(dataInfo);
+                    queryDataQueueInfo[queueID].sort(function(a, b) {
+                        return Date.parse(a.time) - Date.parse(b.time);
+                    });
+                } else {
+                    queryDataQueueInfo[queueID] = [dataInfo];
+                }
+
+                //set task to clean old data
+                if (cleanQueryDataQueueTaskInfo[queueID]) {
+                    clearTimeout(cleanQueryDataQueueTaskInfo[queueID]);
+                }
+
+                cleanQueryDataQueueTaskInfo[queueID] = setTimeout(function() {
+                    delete queryDataQueueInfo[queueID];
+                }, 10000);
+
+                //try to reduce signal jitter
+                var sigInfoArray = [];
+                var sigInfo = {};
+                var dataQueue = queryDataQueueInfo[queueID];
+                var dataIdx = dataQueue.indexOf(dataInfo);
+                var sigArray = dataInfo.data;
+
+                for (var sIdx in sigArray) {
+                    sigInfo[sigArray[sIdx].gatewayID] = sigArray[sIdx].rssi;
+                }
+
+                sigInfoArray.push(sigInfo);
+
+                for (var preIdx = 0; preIdx < dataIdx; preIdx++) {
+                    var isValid = true;
+                    var preSigInfo = {};
+                    var preSigArray = dataQueue[preIdx].data;
+
+                    if (sigArray.length != preSigArray.length) {
+                        continue;
+                    }
+
+                    for (var sIdx in preSigArray) {
+                        var gwid = preSigArray[sIdx].gatewayID;
+                        var sigVal = sigInfo[gwid];
+                        var preSigVal = preSigArray[sIdx].rssi;
+
+                        if (!sigVal || Math.abs(sigVal - preSigVal) > tolerance) {
+                            isValid = false;
+                            break;
+                        }
+
+                        preSigInfo[gwid] = preSigVal;
+                    }
+
+                    if (isValid) {
+                        sigInfoArray.push(preSigInfo);
+                    }
+                }
+
+                //update fingerprint data
+                if (sigInfoArray.length > 1) {
+                    for (var dIdx in gwDataArray) {
+                        var gwid = gwDataArray[dIdx].gatewayID;
+                        var val = 0;
+
+                        for (var sIdx in sigInfoArray) {
+                            val += sigInfoArray[sIdx][gwid];
+                        }
+
+                        gwDataArray[dIdx].rssi = Math.round(parseFloat(val) / sigInfoArray.length);
+                    }
+                }
+
+                //remove too old data
+                if (dataIdx > 1) {
+                    queryDataQueueInfo[queueID].splice(0, dataIdx - 1);
                 }
 
                 //find fingerprint data
@@ -348,7 +523,7 @@ exports.CoorTrans = function CoorTrans(object, callback) {
                                     circle = geoUtil.convertGPSToCartesian(coordinate, base);
                                 }
 
-                                var signal = Math.round(data.rssi + data.snr / 10);
+                                var signal = data.rssi;
                                 circle.r = trilateration.countDistanceByRSSI(signal);
                                 circles.push(circle);
                             }
@@ -367,45 +542,10 @@ exports.CoorTrans = function CoorTrans(object, callback) {
         }, config.dataCollectionTime);
     }
     else {
-        queryTaskInfo[taskID].data = queryTaskInfo[taskID].data.concat(validDataArray);
-        queryTaskInfo[taskID].callbacks.push(callback);
+        queryDataInfo[dataID].data = queryDataInfo[dataID].data.concat(validDataArray);
+        queryDataInfo[dataID].callbacks.push(callback);
     }
 }
-
-//calculate the RSSI reference value and path loss exponent for the station
-//exports.CalculateRSSIConstants = function CalculateRSSIConstants(GWID, dataArray, callback) {
-//    getStationInfo([GWID], function(err, res) {
-//        if (err) {
-//            callback(err);
-//            return;
-//        }
-//
-//        var station = {GpsX: parseFloat(res[GWID].GpsX), GpsY: parseFloat(res[GWID].GpsY)};
-//
-//        if (dataArray == null || dataArray.length <= 1) {
-//            return;
-//        }
-//
-//        var inputArray = [];
-//
-//        for (var idx in dataArray) {
-//            var item = dataArray[idx];
-//            var dist = geoUtil.distOfCoordinates(station,
-//                {GpsX: parseFloat(item.nodeGPS_E), GpsY: parseFloat(item.nodeGPS_N)});
-//
-//            if (dist == 0) {
-//                continue;
-//            }
-//
-//            var sig = Math.round(parseInt(item.rssi) + parseFloat(item.snr) / 10);
-//
-//            inputArray.push({dist: dist, rssi: sig});
-//        }
-//
-//        var result = trilateration.calculateRSSIConstants(inputArray);
-//        callback(result);
-//    })
-//}
 
 //set map information with mapID, info, output callback(err, res)
 exports.setMapInfo = function setMapInfo(mapID, info, callback) {
@@ -565,7 +705,7 @@ function findFingerprint(mapID, dataArray, tolerance, callback) {
     })
 
     var sigArray = sortedDataArray.map(function(item) {
-        var signal = Math.round(item.rssi + item.snr / 10);
+        var signal = item.rssi;
         return {GWID: item.gatewayID, signal: signal};
     });
 
@@ -623,7 +763,7 @@ function recordFingerprint(mapID, position, dataArray, tolerance, callback) {
     })
 
     var sigDataArray = sortedDataArray.map(function(item) {
-        var signal = Math.round(item.rssi + item.snr / 10);
+        var signal = item.rssi;
         return {GWID: item.gatewayID, signal: signal, time: item.time};
     });
 
